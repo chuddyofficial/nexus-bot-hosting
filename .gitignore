@@ -1,0 +1,9 @@
+node_modules/
+dist/
+server/data/*.sqlite
+server/data/*.sqlite-*
+server/.env
+bots/*
+!bots/.gitkeep
+*.log
+.DS_Store
