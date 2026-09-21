@@ -68,7 +68,7 @@ pause
 :: Check / install Node.js
 :: ---------------------------------------------------------------
 echo.
-echo   [1/7] Checking Node.js...
+echo   [1/8] Checking Node.js...
 where node >nul 2>&1
 if %errorlevel% neq 0 (
     echo   Node.js not found. Downloading Node.js LTS installer...
@@ -91,7 +91,7 @@ if %errorlevel% neq 0 (
 :: Check / install Docker Desktop
 :: ---------------------------------------------------------------
 echo.
-echo   [2/7] Checking Docker...
+echo   [2/8] Checking Docker...
 where docker >nul 2>&1
 if %errorlevel% neq 0 (
     echo   Docker not found. Downloading Docker Desktop installer...
@@ -119,7 +119,7 @@ if %errorlevel% neq 0 (
 :: Install dependencies
 :: ---------------------------------------------------------------
 echo.
-echo   [3/7] Installing server dependencies...
+echo   [3/8] Installing server dependencies...
 pushd "%ROOT_DIR%\server"
 call npm install --omit=dev --no-fund --no-audit
 if %errorlevel% neq 0 (
@@ -129,7 +129,7 @@ if %errorlevel% neq 0 (
 popd
 
 echo.
-echo   [4/7] Installing client dependencies and building the site...
+echo   [4/8] Installing client dependencies and building the site...
 pushd "%ROOT_DIR%\client"
 call npm install --no-fund --no-audit
 if %errorlevel% neq 0 (
@@ -143,7 +143,7 @@ popd
 :: Write .env
 :: ---------------------------------------------------------------
 echo.
-echo   [5/7] Writing configuration...
+echo   [5/8] Writing configuration...
 
 for /f "delims=" %%a in ('powershell -NoProfile -Command "[System.Web.Security.Membership]::GeneratePassword(48,0) 2>$null"') do set "JWT_SECRET_GEN=%%a"
 if "%JWT_SECRET_GEN%"=="" (
@@ -179,7 +179,7 @@ echo   Configuration written to server\.env
 :: Firewall rule
 :: ---------------------------------------------------------------
 echo.
-echo   [6/7] Opening firewall port %APP_PORT%...
+echo   [6/8] Opening firewall ports...
 netsh advfirewall firewall show rule name="Nexus Bot Hosting" >nul 2>&1
 if %errorlevel% neq 0 (
     netsh advfirewall firewall add rule name="Nexus Bot Hosting" dir=in action=allow protocol=TCP localport=%APP_PORT%
@@ -189,11 +189,59 @@ if %errorlevel% neq 0 (
     echo   Firewall rule updated for TCP port %APP_PORT%.
 )
 
+netsh advfirewall firewall show rule name="Nexus Bot Hosting Web" >nul 2>&1
+if %errorlevel% neq 0 (
+    netsh advfirewall firewall add rule name="Nexus Bot Hosting Web" dir=in action=allow protocol=TCP localport=80,443
+    echo   Firewall rule added for TCP ports 80,443 ^(public web traffic^).
+) else (
+    netsh advfirewall firewall set rule name="Nexus Bot Hosting Web" new protocol=TCP localport=80,443
+    echo   Firewall rule updated for TCP ports 80,443.
+)
+
+:: ---------------------------------------------------------------
+:: Install Caddy as a reverse proxy (80/443 -> internal app port)
+:: ---------------------------------------------------------------
+echo.
+echo   [7/8] Installing Caddy reverse proxy...
+
+set "CADDY_DIR=%ROOT_DIR%\installer\caddy"
+set "CADDY_EXE=!CADDY_DIR!\caddy.exe"
+if not exist "!CADDY_EXE!" (
+    echo   Downloading Caddy...
+    if not exist "!CADDY_DIR!" mkdir "!CADDY_DIR!"
+    set "CADDY_ZIP=%TEMP%\caddy.zip"
+    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri 'https://caddyserver.com/api/download?os=windows&arch=amd64' -OutFile '!CADDY_ZIP!'"
+    if not exist "!CADDY_ZIP!" (
+        echo   Failed to download Caddy. Please install it manually from caddyserver.com and re-run this installer.
+        pause
+        exit /b 1
+    )
+    powershell -NoProfile -Command "Expand-Archive -Force '!CADDY_ZIP!' '!CADDY_DIR!'"
+)
+
+set "CADDYFILE_SRC=%ROOT_DIR%\installer\Caddyfile"
+set "CADDYFILE_DEST=!CADDY_DIR!\Caddyfile"
+(
+  echo {
+  echo 	auto_https disable_redirects
+  echo }
+  echo.
+  echo :443, :80 {
+  echo 	tls internal
+  echo 	reverse_proxy localhost:%APP_PORT% {
+  echo 		header_up X-Forwarded-For {remote_host}
+  echo 		header_up X-Forwarded-Proto {scheme}
+  echo 	}
+  echo }
+) > "!CADDYFILE_DEST!"
+
+echo   Caddy installed and configured to forward 443/80 -^> localhost:%APP_PORT%.
+
 :: ---------------------------------------------------------------
 :: Install as a Windows service via NSSM
 :: ---------------------------------------------------------------
 echo.
-echo   [7/7] Installing Nexus as a Windows service...
+echo   [8/8] Installing Nexus and Caddy as Windows services...
 
 set "NSSM_DIR=%ROOT_DIR%\installer\nssm"
 set "NSSM_EXE=%NSSM_DIR%\nssm.exe"
@@ -219,24 +267,41 @@ for /f "tokens=*" %%n in ('where node') do set "NODE_EXE=%%n"
 "%NSSM_EXE%" set NexusBotHosting Start SERVICE_AUTO_START
 "%NSSM_EXE%" start NexusBotHosting
 
+"%NSSM_EXE%" stop NexusBotHostingWeb >nul 2>&1
+"%NSSM_EXE%" remove NexusBotHostingWeb confirm >nul 2>&1
+
+"%NSSM_EXE%" install NexusBotHostingWeb "!CADDY_EXE!" "run --config \"!CADDYFILE_DEST!\""
+"%NSSM_EXE%" set NexusBotHostingWeb AppDirectory "!CADDY_DIR!"
+"%NSSM_EXE%" set NexusBotHostingWeb AppStdout "!CADDY_DIR!\caddy.log"
+"%NSSM_EXE%" set NexusBotHostingWeb AppStderr "!CADDY_DIR!\caddy.log"
+"%NSSM_EXE%" set NexusBotHostingWeb AppRotateFiles 1
+"%NSSM_EXE%" set NexusBotHostingWeb Start SERVICE_AUTO_START
+"%NSSM_EXE%" set NexusBotHostingWeb DependOnService NexusBotHosting
+"%NSSM_EXE%" start NexusBotHostingWeb
+
 echo.
 echo   =========================================================
 echo.
-echo    Nexus Bot Hosting is installed and running as a service.
+echo    Nexus Bot Hosting is installed and running as two services.
 echo.
-echo    Local URL:   http://localhost:%APP_PORT%
-echo    Public URL:  https://%DOMAIN%   (once Cloudflare DNS is set)
+echo    Local app URL:  http://localhost:%APP_PORT%
+echo    Local web URL:  https://localhost  (Caddy, self-signed cert)
+echo    Public URL:     https://%DOMAIN%
 echo.
-echo    Service name: NexusBotHosting
-echo      - Restart:  nssm restart NexusBotHosting
-echo      - Stop:     nssm stop NexusBotHosting
-echo      - Logs:     server\data\service.log
+echo    Services:
+echo      NexusBotHosting     (the Node app, port %APP_PORT%)
+echo      NexusBotHostingWeb  (Caddy reverse proxy, ports 80/443)
+echo      - Restart:  nssm restart NexusBotHosting ^&^& nssm restart NexusBotHostingWeb
+echo      - Logs:     server\data\service.log  /  installer\caddy\caddy.log
 echo.
-echo    The server serves the built frontend directly from client\dist,
-echo    so port %APP_PORT% is the ONLY port you need to expose.
-echo    Point %DOMAIN% at this machine's public IP in Cloudflare
-echo    (orange-cloud proxy on, SSL/TLS mode = Full), or use a
-echo    Cloudflare Tunnel targeting http://localhost:%APP_PORT%.
+echo    Caddy listens on 80/443 and forwards to the Node app on
+echo    %APP_PORT% internally, so Cloudflare's proxy (which always
+echo    connects to your origin on 80/443) now has something to talk to.
+echo    Cloudflare SSL/TLS mode should be set to "Full" (not Flexible
+echo    or Full-strict) since Caddy serves a self-signed certificate.
+echo.
+echo    In Cloudflare DNS: bot.chnexus.net -^> A record -^> this
+echo    machine's public IP, proxied (orange cloud) on.
 echo.
 echo   =========================================================
 echo.

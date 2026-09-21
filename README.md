@@ -39,17 +39,25 @@ Without `RESEND_API_KEY` set, emails are skipped (logged to console) instead of 
 1. Copy this whole folder onto the Windows VPS.
 2. Right-click `installer\install.bat` → **Run as administrator**.
 3. Follow the prompts (domain defaults to `bot.chnexus.net`, port defaults to `4000`).
-4. In Cloudflare, point your domain at the VPS's public IP (proxied), SSL/TLS mode = Full.
+4. In Cloudflare DNS, point your domain at the VPS's public IP with an **A record**,
+   proxy (orange cloud) **on**, and SSL/TLS mode set to **Full** (not Flexible or Full-strict).
 
 The installer:
 - Installs Node.js and Docker Desktop if missing
 - Installs server + client dependencies and builds the production client
 - Writes `server/.env` with a generated `JWT_SECRET` and your chosen domain/port
-- Opens the Windows Firewall for the app port
-- Installs the app as a Windows service (`NexusBotHosting`) via NSSM, so it survives reboots
+- Installs [Caddy](https://caddyserver.com) as a reverse proxy listening on 80/443
+- Opens the Windows Firewall for the app port plus 80/443
+- Installs two Windows services via NSSM, so both survive reboots:
+  - `NexusBotHosting` — the Node app (internal port, default 4000)
+  - `NexusBotHostingWeb` — Caddy, forwarding 80/443 → the Node app
 
-The Express server serves the built React app directly, so only one port needs to be
-exposed to the internet.
+**Why Caddy is needed:** Cloudflare's proxy (orange cloud) always connects to your origin
+server on port 80 or 443 — never a custom app port — unless you're on Cloudflare Spectrum.
+Caddy sits in front of the Node app so something is actually listening on 80/443, using a
+self-signed certificate (fine for Cloudflare's "Full" mode, which doesn't validate the
+origin cert). Without this, requests through Cloudflare fail with a 522 (connection timed out)
+even though the app works fine on `localhost:<port>`.
 
 ## Security notes
 
