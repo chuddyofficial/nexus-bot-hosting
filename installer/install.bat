@@ -210,13 +210,22 @@ if not exist "!CADDY_EXE!" (
     echo   Downloading Caddy...
     if not exist "!CADDY_DIR!" mkdir "!CADDY_DIR!"
     set "CADDY_ZIP=%TEMP%\caddy.zip"
-    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri 'https://caddyserver.com/api/download?os=windows&arch=amd64' -OutFile '!CADDY_ZIP!'"
+    del /f /q "!CADDY_ZIP!" >nul 2>&1
+    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_windows_amd64.zip' -OutFile '!CADDY_ZIP!'"
     if not exist "!CADDY_ZIP!" (
         echo   Failed to download Caddy. Please install it manually from caddyserver.com and re-run this installer.
         pause
         exit /b 1
     )
-    powershell -NoProfile -Command "Expand-Archive -Force '!CADDY_ZIP!' '!CADDY_DIR!'"
+    powershell -NoProfile -Command "try { Expand-Archive -Force -LiteralPath '!CADDY_ZIP!' -DestinationPath '!CADDY_DIR!' -ErrorAction Stop } catch { Write-Host $_.Exception.Message; exit 1 }"
+    if not exist "!CADDY_EXE!" (
+        echo   Failed to extract Caddy ^(the downloaded zip may be corrupt or incomplete^).
+        echo   Try re-running this installer, or manually download caddy_2.8.4_windows_amd64.zip
+        echo   from https://github.com/caddyserver/caddy/releases and extract caddy.exe into:
+        echo     !CADDY_DIR!
+        pause
+        exit /b 1
+    )
 )
 
 set "CADDYFILE_SRC=%ROOT_DIR%\installer\Caddyfile"
@@ -278,6 +287,18 @@ for /f "tokens=*" %%n in ('where node') do set "NODE_EXE=%%n"
 "%NSSM_EXE%" set NexusBotHostingWeb Start SERVICE_AUTO_START
 "%NSSM_EXE%" set NexusBotHostingWeb DependOnService NexusBotHosting
 "%NSSM_EXE%" start NexusBotHostingWeb
+
+timeout /t 2 /nobreak >nul
+echo.
+"%NSSM_EXE%" status NexusBotHosting | find /i "RUNNING" >nul
+if %errorlevel% neq 0 (
+    echo   WARNING: NexusBotHosting service is not running. Check server\data\service.log
+)
+"%NSSM_EXE%" status NexusBotHostingWeb | find /i "RUNNING" >nul
+if %errorlevel% neq 0 (
+    echo   WARNING: NexusBotHostingWeb ^(Caddy^) service is not running. Check installer\caddy\caddy.log
+    echo   Common cause: another process already using port 80 or 443 ^(e.g. IIS^).
+)
 
 echo.
 echo   =========================================================
