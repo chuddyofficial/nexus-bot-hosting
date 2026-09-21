@@ -73,14 +73,14 @@ where node >nul 2>&1
 if %errorlevel% neq 0 (
     echo   Node.js not found. Downloading Node.js LTS installer...
     set "NODE_MSI=%TEMP%\node-lts.msi"
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://nodejs.org/dist/v20.17.0/node-v20.17.0-x64.msi' -OutFile '%NODE_MSI%'"
-    if not exist "%NODE_MSI%" (
+    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri 'https://nodejs.org/dist/v20.17.0/node-v20.17.0-x64.msi' -OutFile '!NODE_MSI!'"
+    if not exist "!NODE_MSI!" (
         echo   Failed to download Node.js. Please install it manually from nodejs.org and re-run this installer.
         pause
         exit /b 1
     )
     echo   Installing Node.js ^(this may take a minute^)...
-    msiexec /i "%NODE_MSI%" /qn /norestart
+    msiexec /i "!NODE_MSI!" /qn /norestart
     set "PATH=%PATH%;C:\Program Files\nodejs"
 ) else (
     echo   Node.js found:
@@ -98,14 +98,14 @@ if %errorlevel% neq 0 (
     echo   ^(Docker Desktop requires WSL2 - if this is a fresh Windows Server
     echo    box, you may be prompted to enable WSL2 and reboot.^)
     set "DOCKER_EXE=%TEMP%\DockerDesktopInstaller.exe"
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://desktop.docker.com/win/main/amd64/Docker%%20Desktop%%20Installer.exe' -OutFile '%DOCKER_EXE%'"
-    if not exist "%DOCKER_EXE%" (
+    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri 'https://desktop.docker.com/win/main/amd64/Docker%%20Desktop%%20Installer.exe' -OutFile '!DOCKER_EXE!'"
+    if not exist "!DOCKER_EXE!" (
         echo   Failed to download Docker Desktop. Please install it manually from docker.com and re-run this installer.
         pause
         exit /b 1
     )
     echo   Installing Docker Desktop ^(this may take a few minutes and may require a reboot^)...
-    "%DOCKER_EXE%" install --quiet --accept-license
+    "!DOCKER_EXE!" install --quiet --accept-license
     echo.
     echo   Docker Desktop has been installed. If this is the first install,
     echo   please REBOOT this machine now, then re-run install.bat to continue.
@@ -200,10 +200,10 @@ set "NSSM_EXE=%NSSM_DIR%\nssm.exe"
 if not exist "%NSSM_EXE%" (
     echo   Downloading NSSM ^(service manager^)...
     set "NSSM_ZIP=%TEMP%\nssm.zip"
-    powershell -NoProfile -Command "Invoke-WebRequest -Uri 'https://nssm.cc/release/nssm-2.24.zip' -OutFile '%NSSM_ZIP%'"
-    powershell -NoProfile -Command "Expand-Archive -Force '%NSSM_ZIP%' '%TEMP%\nssm_extract'"
-    if not exist "%NSSM_DIR%" mkdir "%NSSM_DIR%"
-    copy /y "%TEMP%\nssm_extract\nssm-2.24\win64\nssm.exe" "%NSSM_EXE%" >nul
+    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri 'https://nssm.cc/release/nssm-2.24.zip' -OutFile '!NSSM_ZIP!'"
+    powershell -NoProfile -Command "Expand-Archive -Force '!NSSM_ZIP!' '%TEMP%\nssm_extract'"
+    if not exist "!NSSM_DIR!" mkdir "!NSSM_DIR!"
+    copy /y "%TEMP%\nssm_extract\nssm-2.24\win64\nssm.exe" "!NSSM_EXE!" >nul
 )
 
 for /f "tokens=*" %%n in ('where node') do set "NODE_EXE=%%n"
