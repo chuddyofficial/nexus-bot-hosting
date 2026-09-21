@@ -232,11 +232,10 @@ set "CADDYFILE_SRC=%ROOT_DIR%\installer\Caddyfile"
 set "CADDYFILE_DEST=!CADDY_DIR!\Caddyfile"
 (
   echo {
-  echo 	auto_https disable_redirects
+  echo 	auto_https off
   echo }
   echo.
-  echo :443, :80 {
-  echo 	tls internal
+  echo :80 {
   echo 	reverse_proxy localhost:%APP_PORT% {
   echo 		header_up X-Forwarded-For {remote_host}
   echo 		header_up X-Forwarded-Proto {scheme}
@@ -244,7 +243,10 @@ set "CADDYFILE_DEST=!CADDY_DIR!\Caddyfile"
   echo }
 ) > "!CADDYFILE_DEST!"
 
-echo   Caddy installed and configured to forward 443/80 -^> localhost:%APP_PORT%.
+echo   Caddy installed and configured to forward port 80 -^> localhost:%APP_PORT%.
+echo   ^(Using plain HTTP for now - set Cloudflare SSL/TLS mode to "Flexible".^)
+echo   ^(To upgrade to end-to-end HTTPS later, add a Cloudflare Origin Certificate
+echo    and switch this Caddyfile to use it, then set Cloudflare to "Full ^(strict^)".^)
 
 :: ---------------------------------------------------------------
 :: Install as a Windows service via NSSM
@@ -306,20 +308,25 @@ echo.
 echo    Nexus Bot Hosting is installed and running as two services.
 echo.
 echo    Local app URL:  http://localhost:%APP_PORT%
-echo    Local web URL:  https://localhost  (Caddy, self-signed cert)
+echo    Local web URL:  http://localhost  (Caddy, plain HTTP)
 echo    Public URL:     https://%DOMAIN%
 echo.
 echo    Services:
 echo      NexusBotHosting     (the Node app, port %APP_PORT%)
-echo      NexusBotHostingWeb  (Caddy reverse proxy, ports 80/443)
+echo      NexusBotHostingWeb  (Caddy reverse proxy, port 80)
 echo      - Restart:  nssm restart NexusBotHosting ^&^& nssm restart NexusBotHostingWeb
 echo      - Logs:     server\data\service.log  /  installer\caddy\caddy.log
 echo.
-echo    Caddy listens on 80/443 and forwards to the Node app on
+echo    Caddy listens on port 80 and forwards to the Node app on
 echo    %APP_PORT% internally, so Cloudflare's proxy (which always
 echo    connects to your origin on 80/443) now has something to talk to.
-echo    Cloudflare SSL/TLS mode should be set to "Full" (not Flexible
-echo    or Full-strict) since Caddy serves a self-signed certificate.
+echo.
+echo    IMPORTANT: set Cloudflare SSL/TLS mode to "Flexible" (SSL/TLS
+echo    -^> Overview in the Cloudflare dashboard). Cloudflare still
+echo    serves HTTPS to visitors; only the Cloudflare-to-origin leg is
+echo    plain HTTP. Upgrading that leg to HTTPS later requires a
+echo    Cloudflare Origin Certificate installed in Caddy - ask if you
+echo    want that set up.
 echo.
 echo    In Cloudflare DNS: bot.chnexus.net -^> A record -^> this
 echo    machine's public IP, proxied (orange cloud) on.

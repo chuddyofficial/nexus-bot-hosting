@@ -40,24 +40,30 @@ Without `RESEND_API_KEY` set, emails are skipped (logged to console) instead of 
 2. Right-click `installer\install.bat` → **Run as administrator**.
 3. Follow the prompts (domain defaults to `bot.chnexus.net`, port defaults to `4000`).
 4. In Cloudflare DNS, point your domain at the VPS's public IP with an **A record**,
-   proxy (orange cloud) **on**, and SSL/TLS mode set to **Full** (not Flexible or Full-strict).
+   proxy (orange cloud) **on**.
+5. In Cloudflare, set **SSL/TLS → Overview → encryption mode** to **Flexible**.
 
 The installer:
 - Installs Node.js and Docker Desktop if missing
 - Installs server + client dependencies and builds the production client
 - Writes `server/.env` with a generated `JWT_SECRET` and your chosen domain/port
-- Installs [Caddy](https://caddyserver.com) as a reverse proxy listening on 80/443
+- Installs [Caddy](https://caddyserver.com) as a reverse proxy listening on port 80
 - Opens the Windows Firewall for the app port plus 80/443
 - Installs two Windows services via NSSM, so both survive reboots:
   - `NexusBotHosting` — the Node app (internal port, default 4000)
-  - `NexusBotHostingWeb` — Caddy, forwarding 80/443 → the Node app
+  - `NexusBotHostingWeb` — Caddy, forwarding port 80 → the Node app
 
 **Why Caddy is needed:** Cloudflare's proxy (orange cloud) always connects to your origin
 server on port 80 or 443 — never a custom app port — unless you're on Cloudflare Spectrum.
-Caddy sits in front of the Node app so something is actually listening on 80/443, using a
-self-signed certificate (fine for Cloudflare's "Full" mode, which doesn't validate the
-origin cert). Without this, requests through Cloudflare fail with a 522 (connection timed out)
-even though the app works fine on `localhost:<port>`.
+Caddy sits in front of the Node app so something is actually listening on port 80. Without
+this, requests through Cloudflare fail with a 522 (connection timed out) even though the
+app works fine on `localhost:<port>`.
+
+**Why Flexible mode:** Cloudflare terminates HTTPS for visitors and talks plain HTTP to
+Caddy on port 80 — visitors always see a padlock, but the Cloudflare-to-origin leg is
+unencrypted. This is the simplest working setup and fine for most cases. To upgrade to
+end-to-end HTTPS later, install a free [Cloudflare Origin Certificate](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/)
+on the VPS, point Caddy at it, and switch Cloudflare to "Full (strict)".
 
 ## Security notes
 
