@@ -6,7 +6,7 @@ const User = require('../models/User');
 const Bot = require('../models/Bot');
 const { signToken } = require('../services/authService');
 const emailService = require('../services/emailService');
-const dockerService = require('../docker/dockerService');
+const dockerService = require('../process/processService');
 const requireAuth = require('../middleware/requireAuth');
 
 const router = express.Router();

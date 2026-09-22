@@ -30,7 +30,7 @@ echo   =========================================================
 echo.
 echo   This will set up Nexus Bot Hosting on this machine:
 echo     - Verify / install Node.js LTS
-echo     - Verify / install Docker Desktop (bot sandboxing)
+echo     - Verify Python is installed (for Python bots)
 echo     - Install server and client dependencies
 echo     - Build the production web client
 echo     - Configure your domain and environment
@@ -104,31 +104,21 @@ if %errorlevel% neq 0 (
 )
 
 :: ---------------------------------------------------------------
-:: Check / install Docker Desktop
+:: Check Python (bots run as native processes on this host - see
+:: README for why this installer no longer sets up Docker Desktop)
 :: ---------------------------------------------------------------
 echo.
-echo   [2/8] Checking Docker...
-where docker >nul 2>&1
+echo   [2/8] Checking Python...
+where python >nul 2>&1
 if %errorlevel% neq 0 (
-    echo   Docker not found. Downloading Docker Desktop installer...
-    echo   ^(Docker Desktop requires WSL2 - if this is a fresh Windows Server
-    echo    box, you may be prompted to enable WSL2 and reboot.^)
-    set "DOCKER_EXE=%TEMP%\DockerDesktopInstaller.exe"
-    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -UseBasicParsing -Uri 'https://desktop.docker.com/win/main/amd64/Docker%%20Desktop%%20Installer.exe' -OutFile '!DOCKER_EXE!'"
-    if not exist "!DOCKER_EXE!" (
-        echo   Failed to download Docker Desktop. Please install it manually from docker.com and re-run this installer.
-        pause
-        exit /b 1
-    )
-    echo   Installing Docker Desktop ^(this may take a few minutes and may require a reboot^)...
-    "!DOCKER_EXE!" install --quiet --accept-license
-    echo.
-    echo   Docker Desktop has been installed. If this is the first install,
-    echo   please REBOOT this machine now, then re-run install.bat to continue.
+    echo   WARNING: "python" was not found on PATH. Python bots will fail to
+    echo   start until Python 3.x is installed and on PATH. Download it from
+    echo   https://www.python.org/downloads/windows/ ^(check "Add to PATH"
+    echo   during install^), then restart the NexusBotHosting service.
     pause
 ) else (
-    echo   Docker found:
-    docker -v
+    echo   Python found:
+    python --version
 )
 
 :: ---------------------------------------------------------------
@@ -192,7 +182,6 @@ if "!JWT_SECRET_GEN!"=="" (
   echo MAX_BOTS_PER_USER=5
   echo MAX_UPLOAD_SIZE_MB=200
   echo.
-  echo DOCKER_SOCKET=//./pipe/docker_engine
   echo BOT_CPU_LIMIT=0.5
   echo BOT_MEMORY_LIMIT_MB=256
   echo BOT_MAX_CPU_LIMIT=2

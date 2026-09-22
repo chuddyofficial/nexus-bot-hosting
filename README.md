@@ -4,14 +4,41 @@ Free public bot hosting for Python and Node.js bots. Users sign up, create up to
 upload their code (drag-and-drop files/folders, .zip uploads with in-browser extraction,
 or SFTP via WinSCP/FileZilla/etc.), edit files with a full Monaco (VS Code) editor, watch
 a live streaming console, tune startup behavior and resource limits, and start/stop their
-bot — each running in its own isolated Docker container with its own SQLite database.
+bot — each running as its own OS process with its own SQLite database. See "Bot isolation
+model" below for what that does and doesn't guarantee.
 
 ## Structure
 
-- `server/` — Express API (auth, bot lifecycle, file manager, Docker orchestration)
+- `server/` — Express API (auth, bot lifecycle, file manager, process orchestration)
 - `client/` — React (Vite) frontend
 - `bots/` — per-user bot folders created at runtime (gitignored)
 - `installer/install.bat` — one-shot Windows VPS installer/service setup
+
+## Bot isolation model
+
+Bots originally ran in per-bot Docker containers. This VPS's host doesn't support nested
+virtualization, which both WSL2 and Hyper-V require, so Docker Desktop can't run here at
+all — `wsl -l -v` shows no distributions and `docker ps` fails with a pipe error no matter
+how many times Docker Desktop is reinstalled. `server/src/process/processService.js` runs
+each bot as a plain native child process instead (`server/src/docker/` no longer exists).
+
+This is a real trade-off, not a transparent swap:
+
+- **No filesystem isolation.** Every bot runs as the same Windows user as the app itself.
+  There's no bind-mount/chroot equivalent for a plain child process — a bot's own code
+  could read or write outside its folder if it tried to. `pathSafety.js`'s traversal
+  guards still protect the file manager and SFTP endpoints, but they never protected
+  what a bot's *own running code* can do, with Docker or without it.
+- **Soft, not hard, resource limits.** CPU/memory limits are enforced by polling process
+  usage every few seconds (`processService.js`) and killing the process if it's over
+  budget for several consecutive polls — not a kernel-enforced cgroup cap. A bot can
+  transiently spike above its configured limit between polls.
+- **No process/PID isolation.** Bot processes are ordinary siblings of the Node app in
+  the Windows process list, not contained in their own namespace.
+
+If nested virtualization ever becomes available from the hosting provider, or this
+platform needs to serve untrusted users at real scale, moving to a Linux VPS with real
+Docker Engine (no nested virtualization required on Linux) restores full isolation.
 
 ## Design system
 
@@ -32,7 +59,8 @@ namespaced apart so a stray unscoped selector can't bleed from one identity into
 
 ## Local development
 
-**Prerequisites:** Node.js 20+, Docker Desktop (for actually starting/stopping bots).
+**Prerequisites:** Node.js 20+, plus Python 3.x on PATH if you want to actually start
+Python bots locally (Node bots just need Node, which you already have).
 
 ```bash
 # Backend
@@ -47,8 +75,10 @@ npm install
 npm run dev                 # http://localhost:5173 (proxies /api to :4000)
 ```
 
-Without Docker running, everything except actually starting a bot container works
-(signup, login, file manager, editor). `docker` calls will error if the daemon isn't running.
+If `python`/`node` aren't on PATH, everything except actually starting that runtime's
+bots works (signup, login, file manager, editor) — the start call fails with a spawn
+error instead. Override the binaries used with `PYTHON_BIN`/`NODE_BIN` in `.env` if
+they're not on PATH under their default names.
 
 Without `RESEND_API_KEY` set, emails are skipped (logged to console) instead of failing.
 
@@ -62,7 +92,7 @@ Without `RESEND_API_KEY` set, emails are skipped (logged to console) instead of 
 5. In Cloudflare, set **SSL/TLS → Overview → encryption mode** to **Flexible**.
 
 The installer:
-- Installs Node.js and Docker Desktop if missing
+- Installs Node.js if missing, and checks for Python on PATH (Python bots need it)
 - Installs server + client dependencies and builds the production client
 - Writes `server/.env` with a generated `JWT_SECRET` and your chosen domain/port
 - Installs [Caddy](https://caddyserver.com) as a reverse proxy listening on port 80
@@ -114,19 +144,23 @@ Each bot's detail page has six tabs:
 - **console** — live streaming logs over WebSocket (`/ws/console`), not polling; auto-scrolls,
   shows connection state, reconnects per-visit
 - **metrics** — live CPU %, memory, and uptime while the bot is running, sparkline charts
-  polled every 2s from `docker stats`
+  polled every 2s (soft usage estimates from `processService.js` — see "Bot isolation
+  model" above)
 - **startup** — custom start command (overrides the default `python <entry>` / `node <entry>`),
   an optional pre-start hook (e.g. `pip install -r requirements.txt`, runs once before the
-  main process and aborts the start on failure), restart policy (never / on-crash / always,
-  mapped to Docker's own `RestartPolicy`), and an auto-start-on-server-boot toggle
+  main process and aborts the start on failure), restart policy (never / on-crash / always —
+  `always`/`on-crash` are applied by `containerEvents.js` reacting to the process's own exit
+  event, since there's no container runtime to delegate the policy to), and an
+  auto-start-on-server-boot toggle
 - **settings** — rename, per-bot CPU/memory limit overrides (capped by `BOT_MAX_CPU_LIMIT` /
-  `BOT_MAX_MEMORY_LIMIT_MB`), and environment variables injected into the container at start
+  `BOT_MAX_MEMORY_LIMIT_MB`, enforced as a soft poll-and-kill limit), and environment
+  variables injected into the process at start
 - **sftp** — generate/rotate this bot's SFTP credentials
 
-Restart counts are tracked automatically via a Docker event-stream listener
+Restart counts are tracked automatically via `processService.js`'s exit events
 (`server/src/services/containerEvents.js`), which also keeps bot status in sync when a
-container dies or restarts outside of a direct API call (a crash, an OOM kill, Docker's own
-restart policy firing).
+process dies outside of a direct API call (a crash, or being killed for exceeding its
+resource limit).
 
 ## Account settings
 
@@ -145,16 +179,19 @@ bot across the platform.
 
 ## Security notes
 
-- Each bot runs in its own Docker container (CPU/memory/PID limited, isolated filesystem
-  bind-mounted only to that bot's own folder).
+- Each bot runs as its own OS process with soft CPU/memory limits — **not** the container-
+  level filesystem/process isolation this platform originally had. See "Bot isolation
+  model" above for the full trade-off.
 - File manager and SFTP operations are guarded against path traversal
-  (`server/src/services/pathSafety.js`) and zip-slip during extraction.
+  (`server/src/services/pathSafety.js`) and zip-slip during extraction. This protects the
+  app's own file-manager/SFTP endpoints; it does not sandbox what a bot's own running code
+  can read or write on disk.
 - Certain executable extensions (`.exe`, `.dll`, `.bat`, `.cmd`, `.ps1`, `.msi`, `.sys`, `.scr`)
   are blocked from upload/creation, since bots only need interpretable source + data files.
 - Passwords (account and SFTP) are hashed with bcrypt; JWTs are used for session auth.
 - Disabled accounts are rejected at login and on every subsequent authenticated request
   (and their running bots are force-stopped the moment an admin disables the account).
-- Every Docker call on a delete/stop path is caught individually so a container-runtime
+- Every process-lifecycle call on a delete/stop path is caught individually so a spawn/kill
   hiccup degrades that one request instead of crashing the whole process for every user;
   top-level `unhandledRejection`/`uncaughtException` handlers are a last-resort backstop.
 

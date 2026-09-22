@@ -3,7 +3,7 @@ const { URL } = require('url');
 const { verifyToken } = require('../services/authService');
 const User = require('../models/User');
 const Bot = require('../models/Bot');
-const dockerService = require('../docker/dockerService');
+const dockerService = require('../process/processService');
 
 /**
  * Attaches a live-console WebSocket endpoint at /ws/console to the given HTTP server.

@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const Bot = require('../models/Bot');
 const requireAuth = require('../middleware/requireAuth');
-const dockerService = require('../docker/dockerService');
+const dockerService = require('../process/processService');
 const emailService = require('../services/emailService');
 
 const router = express.Router();

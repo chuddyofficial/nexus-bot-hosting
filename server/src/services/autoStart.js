@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const Bot = require('../models/Bot');
-const dockerService = require('../docker/dockerService');
+const dockerService = require('../process/processService');
 
 /** Starts every bot flagged auto_start=1, called once on server boot. */
 async function runAutoStart() {
