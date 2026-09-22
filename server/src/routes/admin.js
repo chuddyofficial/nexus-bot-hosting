@@ -1,0 +1,95 @@
+const express = require('express');
+const fs = require('fs');
+const User = require('../models/User');
+const Bot = require('../models/Bot');
+const requireAuth = require('../middleware/requireAuth');
+const requireAdmin = require('../middleware/requireAdmin');
+const dockerService = require('../docker/dockerService');
+
+const router = express.Router();
+router.use(requireAuth, requireAdmin);
+
+// --- Users ---
+
+router.get('/users', (req, res) => {
+  const users = User.listAll().map((u) => ({
+    ...User.toPublic(u),
+    botCount: Bot.countByUser(u.id)
+  }));
+  res.json({ users });
+});
+
+router.post('/users/:id/disable', (req, res) => {
+  const target = User.getUserById(req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+  if (target.id === req.user.id) return res.status(400).json({ error: 'You cannot disable your own account.' });
+
+  User.setDisabled(target.id, true);
+  res.json({ ok: true });
+});
+
+router.post('/users/:id/enable', (req, res) => {
+  const target = User.getUserById(req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+
+  User.setDisabled(target.id, false);
+  res.json({ ok: true });
+});
+
+router.put('/users/:id/bot-limit', (req, res) => {
+  const target = User.getUserById(req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+
+  const { limit } = req.body || {};
+  const parsed = limit === null || limit === '' ? null : parseInt(limit, 10);
+  if (parsed !== null && (!Number.isInteger(parsed) || parsed < 0 || parsed > 1000)) {
+    return res.status(400).json({ error: 'Limit must be an integer between 0 and 1000, or empty to use the default.' });
+  }
+
+  User.setBotLimitOverride(target.id, parsed);
+  res.json({ ok: true });
+});
+
+router.delete('/users/:id', async (req, res) => {
+  const target = User.getUserById(req.params.id);
+  if (!target) return res.status(404).json({ error: 'User not found.' });
+  if (target.id === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account.' });
+
+  const bots = Bot.listByUser(target.id);
+  for (const bot of bots) {
+    await dockerService.removeContainerIfExists(bot.container_name);
+    fs.rmSync(bot.folder_path, { recursive: true, force: true });
+  }
+
+  User.deleteUser(target.id);
+  res.json({ ok: true });
+});
+
+// --- Bots (platform-wide) ---
+
+router.get('/bots', (req, res) => {
+  const bots = Bot.listAll().map(Bot.toAdminPublic);
+  res.json({ bots });
+});
+
+router.post('/bots/:id/stop', async (req, res) => {
+  const bot = Bot.getById(req.params.id);
+  if (!bot) return res.status(404).json({ error: 'Bot not found.' });
+
+  await dockerService.stopBotContainer(bot.container_name);
+  Bot.updateStatus(bot.id, 'stopped');
+  res.json({ ok: true });
+});
+
+router.delete('/bots/:id', async (req, res) => {
+  const bot = Bot.getById(req.params.id);
+  if (!bot) return res.status(404).json({ error: 'Bot not found.' });
+
+  await dockerService.removeContainerIfExists(bot.container_name);
+  fs.rmSync(bot.folder_path, { recursive: true, force: true });
+  Bot.deleteBot(bot.id);
+
+  res.json({ ok: true });
+});
+
+module.exports = router;

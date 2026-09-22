@@ -20,11 +20,12 @@ function botFolderPath(userId, botId) {
 
 router.get('/', (req, res) => {
   const bots = Bot.listByUser(req.user.id).map(Bot.toPublic);
-  res.json({ bots, limit: Bot.MAX_BOTS_PER_USER });
+  res.json({ bots, limit: Bot.limitForUser(req.user) });
 });
 
 router.post('/', async (req, res) => {
   const { name, runtime } = req.body || {};
+  const limit = Bot.limitForUser(req.user);
 
   if (!name || !NAME_RE.test(name)) {
     return res.status(400).json({ error: 'Bot name must be 2-32 characters (letters, numbers, spaces, - or _).' });
@@ -32,8 +33,8 @@ router.post('/', async (req, res) => {
   if (!['python', 'node'].includes(runtime)) {
     return res.status(400).json({ error: 'Runtime must be "python" or "node".' });
   }
-  if (Bot.countByUser(req.user.id) >= Bot.MAX_BOTS_PER_USER) {
-    return res.status(403).json({ error: `You can only host up to ${Bot.MAX_BOTS_PER_USER} bots.` });
+  if (Bot.countByUser(req.user.id) >= limit) {
+    return res.status(403).json({ error: `You can only host up to ${limit} bots.` });
   }
 
   const { randomUUID } = require('crypto');

@@ -15,12 +15,16 @@ db.exec(`
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
+  username TEXT,
   password_hash TEXT NOT NULL,
   display_name TEXT NOT NULL,
   email_verified INTEGER NOT NULL DEFAULT 0,
   verify_token TEXT,
   reset_token TEXT,
   reset_token_expires INTEGER,
+  is_admin INTEGER NOT NULL DEFAULT 0,
+  disabled INTEGER NOT NULL DEFAULT 0,
+  bot_limit_override INTEGER,
   created_at INTEGER NOT NULL
 );
 
@@ -40,5 +44,19 @@ CREATE TABLE IF NOT EXISTS bots (
 
 CREATE INDEX IF NOT EXISTS idx_bots_user_id ON bots(user_id);
 `);
+
+// Migrate existing DBs (created before these columns existed) without losing data.
+function ensureColumn(table, column, ddl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (!cols.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+  }
+}
+ensureColumn('users', 'username', 'username TEXT');
+ensureColumn('users', 'is_admin', 'is_admin INTEGER NOT NULL DEFAULT 0');
+ensureColumn('users', 'disabled', 'disabled INTEGER NOT NULL DEFAULT 0');
+ensureColumn('users', 'bot_limit_override', 'bot_limit_override INTEGER');
+
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL;`);
 
 module.exports = db;

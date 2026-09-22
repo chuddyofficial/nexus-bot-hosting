@@ -10,6 +10,7 @@ function requireAuth(req, res, next) {
     const payload = verifyToken(token);
     const user = getUserById(payload.sub);
     if (!user) return res.status(401).json({ error: 'Not authenticated' });
+    if (user.disabled) return res.status(403).json({ error: 'This account has been disabled.' });
     req.user = user;
     next();
   } catch (err) {

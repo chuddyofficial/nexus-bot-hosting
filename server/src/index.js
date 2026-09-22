@@ -10,6 +10,7 @@ const rateLimit = require('express-rate-limit');
 const authRoutes = require('./routes/auth');
 const botRoutes = require('./routes/bots');
 const fileRoutes = require('./routes/files');
+const adminRoutes = require('./routes/admin');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -36,6 +37,7 @@ app.get('/api/health', (req, res) => res.json({ ok: true, service: 'nexus-bot-ho
 app.use('/api/auth', authRoutes);
 app.use('/api/bots', botRoutes);
 app.use('/api/bots', fileRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Serve the built React client (production) if present, with SPA fallback for client-side routes.
 const clientDist = path.resolve(__dirname, '..', '..', 'client', 'dist');

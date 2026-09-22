@@ -17,24 +17,29 @@ const authLimiter = rateLimit({
 });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_RE = /^[a-zA-Z0-9._-]{3,32}$/;
 
-function validateSignup({ email, password, displayName }) {
+function validateSignup({ email, password, displayName, username }) {
   if (!email || !EMAIL_RE.test(email)) return 'A valid email address is required.';
   if (!password || password.length < 8) return 'Password must be at least 8 characters.';
   if (!displayName || displayName.trim().length < 2) return 'Display name must be at least 2 characters.';
+  if (username && !USERNAME_RE.test(username)) return 'Username must be 3-32 characters (letters, numbers, ._-).';
   return null;
 }
 
 router.post('/signup', authLimiter, async (req, res) => {
-  const { email, password, displayName } = req.body || {};
-  const error = validateSignup({ email, password, displayName });
+  const { email, password, displayName, username } = req.body || {};
+  const error = validateSignup({ email, password, displayName, username });
   if (error) return res.status(400).json({ error });
 
   if (User.getUserByEmail(email)) {
     return res.status(409).json({ error: 'An account with that email already exists.' });
   }
+  if (username && User.getUserByUsername(username)) {
+    return res.status(409).json({ error: 'That username is already taken.' });
+  }
 
-  const user = User.createUser({ email, password, displayName: displayName.trim() });
+  const user = User.createUser({ email, password, displayName: displayName.trim(), username: username || null });
   const token = signToken(user);
 
   const clientOrigin = process.env.CLIENT_ORIGIN || 'https://bot.chnexus.net';
@@ -48,9 +53,12 @@ router.post('/login', authLimiter, async (req, res) => {
   const { email, password } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
 
-  const user = User.getUserByEmail(email);
+  const user = User.getUserByEmailOrUsername(email);
   if (!user || !User.verifyPassword(user, password)) {
     return res.status(401).json({ error: 'Invalid email or password.' });
+  }
+  if (user.disabled) {
+    return res.status(403).json({ error: 'This account has been disabled.' });
   }
 
   const token = signToken(user);
