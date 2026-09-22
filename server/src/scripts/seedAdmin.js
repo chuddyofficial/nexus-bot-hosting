@@ -14,8 +14,10 @@ if (!email || !password) {
 const existing = User.getUserByEmail(email);
 if (existing) {
   const db = require('../db');
-  db.prepare('UPDATE users SET is_admin = 1 WHERE id = ?').run(existing.id);
-  console.log(`Existing user ${email} promoted to admin.`);
+  User.updatePassword(existing.id, password);
+  db.prepare('UPDATE users SET is_admin = 1, disabled = 0, email_verified = 1, username = COALESCE(?, username) WHERE id = ?')
+    .run(username || null, existing.id);
+  console.log(`Existing user ${email} promoted to admin, password reset, and account enabled.`);
   process.exit(0);
 }
 
