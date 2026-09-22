@@ -28,9 +28,10 @@ export default function ForgotPassword() {
           <Link to="/"><Logo size={38} /></Link>
         </div>
         <div className="card">
-          <h2 style={{ marginTop: 0 }}>Reset your password</h2>
-          <p style={{ color: 'var(--text-dim)', fontSize: 14, marginTop: -8 }}>
-            Enter your email and we'll send you a reset link.
+          <div className="eyebrow" style={{ marginBottom: 8 }}>account recovery</div>
+          <h2 style={{ marginTop: 0, marginBottom: 4, fontSize: 20 }}>reset-password --request</h2>
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 0, marginBottom: 20 }}>
+            # we'll email a one-time reset link
           </p>
 
           {message ? (
@@ -38,18 +39,18 @@ export default function ForgotPassword() {
           ) : (
             <form onSubmit={handleSubmit}>
               <div className="field">
-                <label className="field-label">Email</label>
+                <label className="field-label">email</label>
                 <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com" required />
               </div>
               <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-                {loading ? 'Sending…' : 'Send Reset Link'}
+                {loading ? 'sending…' : 'send reset link'}
               </button>
             </form>
           )}
 
-          <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14, color: 'var(--text-dim)' }}>
-            <Link to="/login" style={{ color: 'var(--accent-2)' }}>Back to log in</Link>
+          <p style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: 'var(--text-dim)' }}>
+            <Link to="/login" style={{ color: 'var(--amber)' }}>&larr; back to login</Link>
           </p>
         </div>
       </div>

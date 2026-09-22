@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import AppNav from '../components/AppNav';
 import CreateBotModal from '../components/CreateBotModal';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
-const STATUS_LABEL = { running: 'Running', stopped: 'Stopped', created: 'Created', error: 'Error' };
+const RUNTIME_TAG = { python: 'PY', node: 'JS' };
 
 export default function Dashboard() {
   const [bots, setBots] = useState([]);
@@ -30,40 +30,68 @@ export default function Dashboard() {
       <AppNav />
       <div className="container" style={{ padding: '32px 24px' }}>
         {user && !user.emailVerified && (
-          <div className="alert alert-info">
-            Please check your inbox to verify your email address.
-          </div>
+          <div className="alert alert-info">verify your email address to unlock all features</div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <h1 style={{ margin: '0 0 4px' }}>Your Bots</h1>
-            <p style={{ margin: 0, color: 'var(--text-dim)' }}>{bots.length} / {limit} bots used</p>
+            <div className="eyebrow" style={{ marginBottom: 6 }}>ls ~/bots</div>
+            <h1 style={{ margin: 0, fontSize: 24 }}>
+              {bots.length}<span style={{ color: 'var(--text-faint)' }}>/{limit}</span> slots used
+            </h1>
           </div>
           <button className="btn btn-primary" disabled={bots.length >= limit} onClick={() => setShowCreate(true)}>
-            + Create Bot
+            + run create-bot
           </button>
         </div>
 
         {loading ? (
-          <p style={{ color: 'var(--text-dim)' }}>Loading…</p>
+          <p className="prompt">loading…</p>
         ) : bots.length === 0 ? (
-          <div className="card" style={{ textAlign: 'center', padding: 60 }}>
-            <h3>No bots yet</h3>
-            <p style={{ color: 'var(--text-dim)' }}>Create your first server to get started.</p>
-            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>Create your first server</button>
+          <div className="card" style={{ textAlign: 'center', padding: '52px 24px' }}>
+            <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 4 }}>~/bots is empty</div>
+            <h3 style={{ margin: '0 0 16px', fontWeight: 600 }}>No bots deployed yet</h3>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>run create-bot</button>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-            {bots.map((bot) => (
-              <div key={bot.id} className="card" style={{ cursor: 'pointer' }} onClick={() => navigate(`/bots/${bot.id}`)}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <h3 style={{ margin: '0 0 4px' }}>{bot.name}</h3>
-                  <span className={`badge badge-${bot.status}`}><span className="dot" />{STATUS_LABEL[bot.status] || bot.status}</span>
-                </div>
-                <p style={{ color: 'var(--text-dim)', fontSize: 13, margin: '4px 0 0' }}>
-                  {bot.runtime === 'python' ? '🐍 Python' : '⬢ Node.js'} &middot; entry: {bot.entryFile || 'not set'}
-                </p>
+          <div style={{ border: '1px solid var(--border)' }}>
+            <div style={{
+              display: 'grid', gridTemplateColumns: '28px 1fr 100px 140px 1fr',
+              gap: 12, padding: '9px 16px', fontSize: 11, color: 'var(--text-faint)',
+              textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)'
+            }}>
+              <span></span>
+              <span>name</span>
+              <span>runtime</span>
+              <span>status</span>
+              <span>entry</span>
+            </div>
+            {bots.map((bot, i) => (
+              <div
+                key={bot.id}
+                onClick={() => navigate(`/bots/${bot.id}`)}
+                style={{
+                  display: 'grid', gridTemplateColumns: '28px 1fr 100px 140px 1fr',
+                  gap: 12, padding: '13px 16px', alignItems: 'center',
+                  borderTop: i === 0 ? 'none' : '1px solid var(--border)',
+                  cursor: 'pointer', fontSize: 13, transition: 'background 0.1s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface)'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  width: 22, height: 22, borderRadius: 2, fontSize: 10, fontWeight: 800,
+                  background: 'var(--surface-2)', color: 'var(--text-dim)', border: '1px solid var(--border-bright)'
+                }}>
+                  {RUNTIME_TAG[bot.runtime]}
+                </span>
+                <span style={{ fontWeight: 600 }}>{bot.name}</span>
+                <span style={{ color: 'var(--text-dim)' }}>{bot.runtime}</span>
+                <span className={`badge badge-${bot.status}`} style={{ justifySelf: 'start' }}>
+                  <span className="dot" />{bot.status}
+                </span>
+                <span style={{ color: 'var(--text-faint)' }}>{bot.entryFile || '—'}</span>
               </div>
             ))}
           </div>

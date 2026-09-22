@@ -22,17 +22,17 @@ export default function VerifyEmail() {
           <Link to="/"><Logo size={38} /></Link>
         </div>
         <div className="card">
-          {status === 'loading' && <p>Verifying your email…</p>}
+          {status === 'loading' && <p className="prompt">verifying email…</p>}
           {status === 'success' && (
             <>
-              <div className="alert alert-success">Your email has been verified!</div>
-              <Link to="/dashboard" className="btn btn-primary">Go to Dashboard</Link>
+              <div className="alert alert-success">email verified</div>
+              <Link to="/dashboard" className="btn btn-primary">go to dashboard</Link>
             </>
           )}
           {status === 'error' && (
             <>
-              <div className="alert alert-error">This verification link is invalid or has expired.</div>
-              <Link to="/login" className="btn btn-secondary">Back to Log In</Link>
+              <div className="alert alert-error">this verification link is invalid or has expired</div>
+              <Link to="/login" className="btn btn-secondary">back to login</Link>
             </>
           )}
         </div>

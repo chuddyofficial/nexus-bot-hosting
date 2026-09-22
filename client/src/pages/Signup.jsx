@@ -35,34 +35,35 @@ export default function Signup() {
           <Link to="/"><Logo size={38} /></Link>
         </div>
         <div className="card">
-          <h2 style={{ marginTop: 0 }}>Create your free account</h2>
-          <p style={{ color: 'var(--text-dim)', fontSize: 14, marginTop: -8 }}>Host up to 5 bots at no cost.</p>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>new account</div>
+          <h2 style={{ marginTop: 0, marginBottom: 4, fontSize: 20 }}>create-account --plan=free</h2>
+          <p style={{ color: 'var(--text-dim)', fontSize: 13, marginTop: 0, marginBottom: 20 }}># up to 5 bot slots, no card required</p>
 
           {error && <div className="alert alert-error">{error}</div>}
 
           <form onSubmit={handleSubmit}>
             <div className="field">
-              <label className="field-label">Display Name</label>
+              <label className="field-label">display_name</label>
               <input className="input" value={displayName} onChange={(e) => setDisplayName(e.target.value)}
                 placeholder="Jane Doe" required minLength={2} maxLength={64} />
             </div>
             <div className="field">
-              <label className="field-label">Email</label>
+              <label className="field-label">email</label>
               <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com" required />
             </div>
             <div className="field">
-              <label className="field-label">Password</label>
+              <label className="field-label">password</label>
               <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters" required minLength={8} />
+                placeholder="8+ characters" required minLength={8} />
             </div>
             <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-              {loading ? 'Creating account…' : 'Sign Up'}
+              {loading ? 'creating…' : 'run create-account'}
             </button>
           </form>
 
-          <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14, color: 'var(--text-dim)' }}>
-            Already have an account? <Link to="/login" style={{ color: 'var(--accent-2)' }}>Log in</Link>
+          <p style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: 'var(--text-dim)' }}>
+            already have an account? <Link to="/login" style={{ color: 'var(--amber)' }}>log in &rarr;</Link>
           </p>
         </div>
       </div>

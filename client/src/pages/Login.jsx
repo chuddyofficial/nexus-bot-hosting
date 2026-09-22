@@ -34,31 +34,32 @@ export default function Login() {
           <Link to="/"><Logo size={38} /></Link>
         </div>
         <div className="card">
-          <h2 style={{ marginTop: 0 }}>Welcome back</h2>
+          <div className="eyebrow" style={{ marginBottom: 8 }}>authenticate</div>
+          <h2 style={{ marginTop: 0, marginBottom: 20, fontSize: 20 }}>login --user</h2>
 
           {error && <div className="alert alert-error">{error}</div>}
 
           <form onSubmit={handleSubmit}>
             <div className="field">
-              <label className="field-label">Email</label>
+              <label className="field-label">email</label>
               <input className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com" required />
             </div>
             <div className="field">
-              <label className="field-label">Password</label>
+              <label className="field-label">password</label>
               <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••" required />
             </div>
             <div style={{ textAlign: 'right', marginBottom: 16, marginTop: -8 }}>
-              <Link to="/forgot-password" style={{ fontSize: 13, color: 'var(--text-dim)' }}>Forgot password?</Link>
+              <Link to="/forgot-password" style={{ fontSize: 12, color: 'var(--text-faint)' }}>forgot password?</Link>
             </div>
             <button className="btn btn-primary" style={{ width: '100%' }} disabled={loading}>
-              {loading ? 'Logging in…' : 'Log In'}
+              {loading ? 'authenticating…' : 'run login'}
             </button>
           </form>
 
-          <p style={{ textAlign: 'center', marginTop: 20, fontSize: 14, color: 'var(--text-dim)' }}>
-            Don't have an account? <Link to="/signup" style={{ color: 'var(--accent-2)' }}>Sign up</Link>
+          <p style={{ textAlign: 'center', marginTop: 20, fontSize: 13, color: 'var(--text-dim)' }}>
+            don't have an account? <Link to="/signup" style={{ color: 'var(--amber)' }}>create one &rarr;</Link>
           </p>
         </div>
       </div>
