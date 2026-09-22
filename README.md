@@ -75,6 +75,20 @@ users' files. The SFTP server is embedded directly in the Node app (via `ssh2`, 
 service to configure) and listens on port 2222. Passwords are shown once at generation time
 and stored only as a bcrypt hash — regenerate from the dashboard if lost.
 
+**Important — Cloudflare and SFTP don't mix.** If your domain is proxied through Cloudflare
+(orange cloud), only HTTP/HTTPS traffic is forwarded — SFTP on port 2222 will hang/timeout
+if a user tries to connect to the domain itself. The dashboard's SFTP tab shows the correct
+host to use (from `SFTP_HOST` in `.env`, which the installer auto-detects as the VPS's public
+IP), not the site's domain. Don't change the SFTP tab to show the domain unless that domain
+is DNS-only (grey cloud) or you're on Cloudflare Spectrum.
+
+The firewall rule for port 2222 (`Nexus Bot Hosting SFTP`) is only created by a full
+`install.bat` run. If you deploy updates by hand (`git pull` + rebuild, skipping the
+installer), that rule won't exist on a fresh VPS — add it manually if needed:
+```
+netsh advfirewall firewall add rule name="Nexus Bot Hosting SFTP" dir=in action=allow protocol=TCP localport=2222
+```
+
 ## Per-bot dashboard tabs
 
 Each bot's detail page has six tabs:

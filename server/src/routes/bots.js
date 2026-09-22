@@ -163,9 +163,22 @@ router.post('/:id/sftp-credentials', (req, res) => {
 
   const { sftpUsername, sftpPassword } = Bot.regenerateSftpCredentials(bot.id);
   const port = process.env.SFTP_PORT || '2222';
-  const host = process.env.PUBLIC_DOMAIN || 'bot.chnexus.net';
+  // SFTP traffic can't go through a Cloudflare-proxied domain (it only forwards
+  // HTTP/HTTPS), so this must be the VPS's real reachable address, not PUBLIC_DOMAIN.
+  const host = process.env.SFTP_HOST || process.env.PUBLIC_DOMAIN || 'bot.chnexus.net';
 
   res.json({ sftpUsername, sftpPassword, host, port });
+});
+
+// Connection info only (no credentials) - lets the UI show the correct host/port
+// for an already-generated login without re-issuing a new password.
+router.get('/:id/sftp-info', (req, res) => {
+  const bot = Bot.getByIdForUser(req.params.id, req.user.id);
+  if (!bot) return res.status(404).json({ error: 'Bot not found.' });
+
+  const port = process.env.SFTP_PORT || '2222';
+  const host = process.env.SFTP_HOST || process.env.PUBLIC_DOMAIN || 'bot.chnexus.net';
+  res.json({ host, port });
 });
 
 // --- Settings tab: rename ---

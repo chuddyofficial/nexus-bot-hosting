@@ -55,12 +55,28 @@ echo.
 set /p "RESEND_KEY=  Paste your Resend API key (or leave blank to add later): "
 
 echo.
-echo   Using domain:  %DOMAIN%
-echo   Using port:    %APP_PORT%
+echo   Detecting this machine's public IP for SFTP connections...
+for /f "delims=" %%a in ('powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { (Invoke-WebRequest -UseBasicParsing -Uri 'https://ifconfig.me' -TimeoutSec 5).Content.Trim() } catch { '' }"') do set "DETECTED_IP=%%a"
+if "!DETECTED_IP!"=="" (
+    set /p "SFTP_HOST_VAL=  Could not auto-detect public IP. Enter it manually for SFTP connections: "
+) else (
+    set /p "SFTP_HOST_VAL=  SFTP host for WinSCP/etc. [!DETECTED_IP!]: "
+    if "!SFTP_HOST_VAL!"=="" set "SFTP_HOST_VAL=!DETECTED_IP!"
+)
+
+echo.
+echo   Using domain:     %DOMAIN%
+echo   Using port:       %APP_PORT%
+echo   Using SFTP host:  !SFTP_HOST_VAL!
 echo.
 echo   NOTE: In Cloudflare, point %DOMAIN% (CNAME/A record) at this
 echo   machine's public IP, with the orange cloud (proxy) enabled,
 echo   and set SSL/TLS mode to "Full" so HTTPS reaches this server.
+echo.
+echo   IMPORTANT: Cloudflare's proxy only forwards HTTP/HTTPS, so SFTP
+echo   (port 2222) will NOT work through %DOMAIN% - users must connect
+echo   directly to !SFTP_HOST_VAL! instead. This is already handled;
+echo   the dashboard shows the correct SFTP host automatically.
 echo.
 pause
 
@@ -183,6 +199,7 @@ if "!JWT_SECRET_GEN!"=="" (
   echo BOT_MAX_MEMORY_LIMIT_MB=1024
   echo.
   echo SFTP_PORT=2222
+  echo SFTP_HOST=!SFTP_HOST_VAL!
 ) > "%ROOT_DIR%\server\.env"
 
 echo   Configuration written to server\.env
