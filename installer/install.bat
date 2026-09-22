@@ -145,7 +145,7 @@ popd
 echo.
 echo   [5/8] Writing configuration...
 
-for /f "delims=" %%a in ('powershell -NoProfile -Command "[Convert]::ToBase64String([byte[]](1..48 ^| ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))"') do set "JWT_SECRET_GEN=%%a"
+for /f "delims=" %%a in ('powershell -NoProfile -Command "$b=New-Object byte[] 48; (New-Object Security.Cryptography.RNGCryptoServiceProvider).GetBytes($b); [Convert]::ToBase64String($b)"') do set "JWT_SECRET_GEN=%%a"
 if "!JWT_SECRET_GEN!"=="" (
     echo   Failed to generate a JWT secret automatically.
     echo   Please enter one manually - any long random string works ^(40+ characters^):
