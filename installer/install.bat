@@ -145,9 +145,17 @@ popd
 echo.
 echo   [5/8] Writing configuration...
 
-for /f "delims=" %%a in ('powershell -NoProfile -Command "[System.Web.Security.Membership]::GeneratePassword(48,0) 2>$null"') do set "JWT_SECRET_GEN=%%a"
-if "%JWT_SECRET_GEN%"=="" (
-    for /f "delims=" %%a in ('powershell -NoProfile -Command "-join ((48..57)+(65..90)+(97..122)|Get-Random -Count 48|%%{[char]$_})"') do set "JWT_SECRET_GEN=%%a"
+for /f "delims=" %%a in ('powershell -NoProfile -Command "[Convert]::ToBase64String([byte[]](1..48 ^| ForEach-Object { Get-Random -Minimum 0 -Maximum 256 }))"') do set "JWT_SECRET_GEN=%%a"
+if "!JWT_SECRET_GEN!"=="" (
+    echo   Failed to generate a JWT secret automatically.
+    echo   Please enter one manually - any long random string works ^(40+ characters^):
+    set /p "JWT_SECRET_GEN=  JWT secret: "
+)
+if "!JWT_SECRET_GEN!"=="" (
+    echo   ERROR: No JWT secret was set. The server will not start without one.
+    echo   Re-run this installer and provide a value when prompted.
+    pause
+    exit /b 1
 )
 
 (
