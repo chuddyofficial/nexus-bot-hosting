@@ -9,9 +9,26 @@ bot — each running in its own isolated Docker container with its own SQLite da
 ## Structure
 
 - `server/` — Express API (auth, bot lifecycle, file manager, Docker orchestration)
-- `client/` — React (Vite) frontend, dark neon "Nexus" branding
+- `client/` — React (Vite) frontend
 - `bots/` — per-user bot folders created at runtime (gitignored)
 - `installer/install.bat` — one-shot Windows VPS installer/service setup
+
+## Design system
+
+Two intentionally separate visual identities, scoped so neither leaks into the other:
+
+- **Landing + auth pages** (`Landing.jsx`, `Signup.jsx`, `Login.jsx`, etc.) — a terminal/
+  console aesthetic (amber-on-black, JetBrains Mono, command-style copy). Styled by
+  `client/src/styles/global.css`, everything scoped under a `.landing-scope` wrapper class.
+- **The logged-in app** (dashboard, bot pages, account, admin) — a dark technical console:
+  indigo accent (`#6e76ff`) on graphite, Inter for UI chrome, monospace reserved for actual
+  data (logs, code, credentials, env vars). Styled by `client/src/styles/app.css`, classes
+  prefixed `app-*` (`.app-card`, `.app-btn-primary`, etc.), scoped under `.app-scope`.
+  Persistent left sidebar (`AppShell.jsx`) with top-level nav (Dashboard, Admin, Account)
+  plus each bot's own six tabs nested inline under it when you're inside that bot.
+
+Do not mix classes between the two systems (`.card` vs `.app-card`) — they're deliberately
+namespaced apart so a stray unscoped selector can't bleed from one identity into the other.
 
 ## Local development
 

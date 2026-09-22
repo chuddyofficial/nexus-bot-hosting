@@ -31,7 +31,7 @@ export default function BotSettingsPanel({ bot, onUpdated }) {
     try {
       await api.put(`/bots/${bot.id}/settings`, { name });
       await onUpdated();
-      flash('saved');
+      flash('Saved.');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save.');
     } finally {
@@ -49,7 +49,7 @@ export default function BotSettingsPanel({ bot, onUpdated }) {
         memoryLimitMb: memoryLimitMb === '' ? null : memoryLimitMb
       });
       await onUpdated();
-      flash('saved — takes effect next restart');
+      flash('Saved — takes effect next restart.');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save.');
     } finally {
@@ -66,7 +66,7 @@ export default function BotSettingsPanel({ bot, onUpdated }) {
       envRows.forEach(({ key, value }) => { if (key.trim()) envVars[key.trim()] = value; });
       await api.put(`/bots/${bot.id}/env`, { envVars });
       await onUpdated();
-      flash('saved — takes effect next restart');
+      flash('Saved — takes effect next restart.');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save.');
     } finally {
@@ -87,54 +87,56 @@ export default function BotSettingsPanel({ bot, onUpdated }) {
   }
 
   return (
-    <div style={{ padding: 20, maxWidth: 560, overflowY: 'auto' }}>
-      {error && <div className="alert alert-error">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
+    <div style={{ padding: '24px 28px', maxWidth: 580, overflowY: 'auto' }}>
+      {error && <div className="app-alert app-alert-error">{error}</div>}
+      {success && <div className="app-alert app-alert-success">{success}</div>}
 
-      <form onSubmit={saveName} style={{ marginBottom: 32 }}>
-        <div className="eyebrow" style={{ marginBottom: 6 }}>general</div>
-        <div className="field">
-          <label className="field-label">bot_name</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} maxLength={32} />
+      <form onSubmit={saveName} className="app-card" style={{ marginBottom: 20 }}>
+        <div className="app-eyebrow" style={{ marginBottom: 4 }}>General</div>
+        <h3 style={{ fontSize: 15, marginBottom: 16 }}>Bot name</h3>
+        <div className="app-field">
+          <input className="app-input" value={name} onChange={(e) => setName(e.target.value)} maxLength={32} />
         </div>
-        <button className="btn btn-secondary btn-sm" disabled={busy || name === bot.name}>save name</button>
+        <button className="app-btn app-btn-secondary app-btn-sm" disabled={busy || name === bot.name}>Save name</button>
       </form>
 
-      <form onSubmit={saveResources} style={{ marginBottom: 32 }}>
-        <div className="eyebrow" style={{ marginBottom: 6 }}>resource limits</div>
-        <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 0, marginBottom: 14 }}>
-          leave blank to use the platform default
+      <form onSubmit={saveResources} className="app-card" style={{ marginBottom: 20 }}>
+        <div className="app-eyebrow" style={{ marginBottom: 4 }}>Resource limits</div>
+        <h3 style={{ fontSize: 15, marginBottom: 6 }}>CPU &amp; memory</h3>
+        <p style={{ fontSize: 12.5, color: 'var(--app-text-faint)', marginTop: 0, marginBottom: 16 }}>
+          Leave blank to use the platform default.
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label className="field-label">cpu_limit (cores)</label>
-            <input className="input" type="number" step="0.1" min="0" value={cpuLimit}
+          <div className="app-field" style={{ marginBottom: 0 }}>
+            <label className="app-field-label">CPU limit (cores)</label>
+            <input className="app-input" type="number" step="0.1" min="0" value={cpuLimit}
               onChange={(e) => setCpuLimit(e.target.value)} placeholder="0.5" />
           </div>
-          <div className="field" style={{ marginBottom: 0 }}>
-            <label className="field-label">memory_limit (mb)</label>
-            <input className="input" type="number" step="1" min="0" value={memoryLimitMb}
+          <div className="app-field" style={{ marginBottom: 0 }}>
+            <label className="app-field-label">Memory limit (MB)</label>
+            <input className="app-input" type="number" step="1" min="0" value={memoryLimitMb}
               onChange={(e) => setMemoryLimitMb(e.target.value)} placeholder="256" />
           </div>
         </div>
-        <button className="btn btn-secondary btn-sm" disabled={busy}>save limits</button>
+        <button className="app-btn app-btn-secondary app-btn-sm" disabled={busy}>Save limits</button>
       </form>
 
-      <form onSubmit={saveEnv}>
-        <div className="eyebrow" style={{ marginBottom: 6 }}>environment variables</div>
-        <p style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 0, marginBottom: 14 }}>
-          available to your bot process as env vars at startup
+      <form onSubmit={saveEnv} className="app-card">
+        <div className="app-eyebrow" style={{ marginBottom: 4 }}>Environment</div>
+        <h3 style={{ fontSize: 15, marginBottom: 6 }}>Environment variables</h3>
+        <p style={{ fontSize: 12.5, color: 'var(--app-text-faint)', marginTop: 0, marginBottom: 16 }}>
+          Available to your bot process at startup.
         </p>
         {envRows.map((row, i) => (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, marginBottom: 8 }}>
-            <input className="input" placeholder="KEY" value={row.key} onChange={(e) => updateRow(i, 'key', e.target.value)} />
-            <input className="input" placeholder="value" value={row.value} onChange={(e) => updateRow(i, 'value', e.target.value)} />
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => removeRow(i)}>&times;</button>
+            <input className="app-input" placeholder="KEY" value={row.key} onChange={(e) => updateRow(i, 'key', e.target.value)} />
+            <input className="app-input" placeholder="value" value={row.value} onChange={(e) => updateRow(i, 'value', e.target.value)} />
+            <button type="button" className="app-btn app-btn-ghost app-btn-sm" onClick={() => removeRow(i)}>&times;</button>
           </div>
         ))}
-        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-          <button type="button" className="btn btn-ghost btn-sm" onClick={addRow}>+ variable</button>
-          <button className="btn btn-secondary btn-sm" disabled={busy}>save variables</button>
+        <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+          <button type="button" className="app-btn app-btn-ghost app-btn-sm" onClick={addRow}>+ Variable</button>
+          <button className="app-btn app-btn-secondary app-btn-sm" disabled={busy}>Save variables</button>
         </div>
       </form>
     </div>

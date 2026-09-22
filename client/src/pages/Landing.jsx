@@ -30,7 +30,7 @@ export default function Landing() {
   }, [visibleLines]);
 
   return (
-    <div>
+    <div className="landing-scope" style={{ minHeight: '100%' }}>
       <nav className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
         <Logo size={32} />
         <div style={{ display: 'flex', gap: 8 }}>

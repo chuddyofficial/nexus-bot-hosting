@@ -56,23 +56,23 @@ export default function LiveConsole({ botId, active }) {
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '7px 16px', borderBottom: '1px solid var(--border)', fontSize: 12
+        padding: '9px 16px', borderBottom: '1px solid var(--app-border)', fontSize: 12
       }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: connected ? 'var(--ok)' : 'var(--text-faint)' }}>
-          <span className="dot" style={{ width: 6, height: 6 }} />
-          {connected ? 'live' : 'disconnected'}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: connected ? 'var(--app-ok)' : 'var(--app-text-faint)' }}>
+          <span className="app-dot" />
+          {connected ? 'Live' : 'Disconnected'}
         </span>
-        <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }} onClick={clear}>clear</button>
+        <button className="app-btn app-btn-ghost app-btn-sm" onClick={clear}>Clear</button>
       </div>
       <div
         ref={outputRef}
         onScroll={handleScroll}
         style={{
-          flex: 1, background: '#000', color: 'var(--amber)', fontFamily: 'var(--mono)',
+          flex: 1, background: '#0a0b0d', color: '#7ee787', fontFamily: 'var(--mono)',
           fontSize: 12.5, padding: 16, overflowY: 'auto', whiteSpace: 'pre-wrap', lineHeight: 1.7
         }}
       >
-        {lines || '# no output yet — start the bot to stream logs here'}
+        {lines || '// No output yet — start the bot to stream logs here.'}
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
-import AppNav from '../components/AppNav';
+import AppShell from '../components/AppShell';
 import FileTree from '../components/FileTree';
 import SftpPanel from '../components/SftpPanel';
 import LiveConsole from '../components/LiveConsole';
@@ -9,6 +9,7 @@ import BotSettingsPanel from '../components/BotSettingsPanel';
 import StartupConfigPanel from '../components/StartupConfigPanel';
 import MetricsPanel from '../components/MetricsPanel';
 import api from '../api/client';
+import { useBots } from '../context/BotsContext';
 
 // Walks a dropped FileSystemEntry (file or directory) recursively, collecting
 // { file, relativePath } pairs so folder structure survives the upload.
@@ -44,7 +45,6 @@ async function collectDroppedFiles(dataTransfer) {
   const entries = items.map((item) => item.webkitGetAsEntry?.()).filter(Boolean);
 
   if (entries.length === 0) {
-    // Fallback for browsers without webkitGetAsEntry: flat file list, no folder support.
     return Array.from(dataTransfer.files || []).map((file) => ({ file, relativePath: file.name }));
   }
 
@@ -62,24 +62,19 @@ function langForFile(name = '') {
   return 'plaintext';
 }
 
-const TABS = [
-  { key: 'editor', label: 'editor' },
-  { key: 'console', label: 'console' },
-  { key: 'metrics', label: 'metrics' },
-  { key: 'startup', label: 'startup' },
-  { key: 'settings', label: 'settings' },
-  { key: 'sftp', label: 'sftp' }
-];
+const RUNTIME_TAG = { python: 'PY', node: 'JS' };
 
 export default function BotDetail() {
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
+  const tab = searchParams.get('tab') || 'editor';
   const navigate = useNavigate();
+  const { refresh: refreshBotList } = useBots();
   const [bot, setBot] = useState(null);
   const [tree, setTree] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
   const [content, setContent] = useState('');
   const [dirty, setDirty] = useState(false);
-  const [tab, setTab] = useState('editor');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [dragActive, setDragActive] = useState(false);
@@ -95,7 +90,7 @@ export default function BotDetail() {
     setTree(data.tree);
   }, [id]);
 
-  useEffect(() => { loadBot(); loadTree(); }, [loadBot, loadTree]);
+  useEffect(() => { setBot(null); loadBot(); loadTree(); }, [loadBot, loadTree]);
 
   async function openFile(node) {
     if (dirty && !confirm('Discard unsaved changes?')) return;
@@ -104,7 +99,7 @@ export default function BotDetail() {
       setActiveFile(node.path);
       setContent(data.content);
       setDirty(false);
-      setTab('editor');
+      navigate(`/bots/${id}`);
     } catch (err) {
       setError(err.response?.data?.error || 'Could not open file.');
     }
@@ -190,7 +185,7 @@ export default function BotDetail() {
         await api.post(`/bots/${id}/stop`);
       } else {
         await api.post(`/bots/${id}/start`);
-        setTab('console');
+        navigate(`/bots/${id}?tab=console`);
       }
       await loadBot();
     } catch (err) {
@@ -203,6 +198,7 @@ export default function BotDetail() {
   async function deleteBot() {
     if (!confirm(`Permanently delete "${bot.name}"? This cannot be undone.`)) return;
     await api.delete(`/bots/${id}`);
+    await refreshBotList();
     navigate('/dashboard');
   }
 
@@ -216,116 +212,113 @@ export default function BotDetail() {
     }
   }
 
-  if (!bot) return <div><AppNav /><div className="container prompt" style={{ padding: 32 }}>loading…</div></div>;
+  if (!bot) {
+    return (
+      <AppShell>
+        <div style={{ padding: 40, color: 'var(--app-text-dim)' }}>Loading…</div>
+      </AppShell>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      <AppNav />
-      <div style={{ borderBottom: '1px solid var(--border)', padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Link to="/dashboard" style={{ color: 'var(--text-faint)', fontSize: 13 }}>&larr; back</Link>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>{bot.name}</h2>
-          <span className={`badge badge-${bot.status}`}><span className="dot" />{bot.status}</span>
-          <span style={{
-            fontSize: 10, fontWeight: 800, letterSpacing: '0.03em', padding: '2px 6px', borderRadius: 2,
-            background: 'var(--surface-2)', color: 'var(--text-dim)', border: '1px solid var(--border-bright)'
-          }}>
-            {bot.runtime === 'python' ? 'PY' : 'JS'}
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className={`btn btn-sm ${bot.status === 'running' ? 'btn-danger' : 'btn-primary'}`} onClick={toggleRunning} disabled={busy}>
-            {bot.status === 'running' ? 'stop' : 'start'}
-          </button>
-          <button className="btn btn-danger btn-sm" onClick={deleteBot}>delete</button>
-        </div>
-      </div>
-
-      <div style={{ display: 'flex', gap: 4, padding: '8px 24px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            className={`btn btn-sm ${tab === t.key ? 'btn-secondary' : 'btn-ghost'}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {error && <div className="alert alert-error" style={{ margin: '12px 24px 0' }}>{error}</div>}
-
-      <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div
-          style={{
-            width: 260, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column',
-            position: 'relative', background: dragActive ? 'var(--amber-glow)' : 'transparent',
-            transition: 'background 0.1s ease'
-          }}
-          onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
-          onDragLeave={(e) => { if (e.currentTarget === e.target) setDragActive(false); }}
-          onDrop={handleDrop}
-        >
-          {dragActive && (
-            <div style={{
-              position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
-              border: '2px dashed var(--amber)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: 'rgba(255,176,0,0.06)', fontSize: 13, color: 'var(--amber)', fontWeight: 600, textAlign: 'center', padding: 16
+    <AppShell>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <div style={{ borderBottom: '1px solid var(--app-border)', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: 30, height: 30, borderRadius: 8, fontSize: 10, fontWeight: 800,
+              background: 'var(--app-surface-2)', color: 'var(--app-text-dim)'
             }}>
-              drop files or folders<br />to upload
+              {RUNTIME_TAG[bot.runtime]}
+            </span>
+            <h2 style={{ fontSize: 17 }}>{bot.name}</h2>
+            <span className={`app-badge app-badge-${bot.status}`}><span className="app-dot" />{bot.status}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className={`app-btn app-btn-sm ${bot.status === 'running' ? 'app-btn-danger' : 'app-btn-primary'}`} onClick={toggleRunning} disabled={busy}>
+              {bot.status === 'running' ? 'Stop' : 'Start'}
+            </button>
+            <button className="app-btn app-btn-danger app-btn-sm" onClick={deleteBot}>Delete</button>
+          </div>
+        </div>
+
+        {error && <div className="app-alert app-alert-error" style={{ margin: '12px 24px 0' }}>{error}</div>}
+
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          {tab === 'editor' && (
+            <div
+              style={{
+                width: 260, borderRight: '1px solid var(--app-border)', display: 'flex', flexDirection: 'column',
+                position: 'relative', background: dragActive ? 'var(--app-accent-glow)' : 'transparent',
+                transition: 'background 0.1s ease'
+              }}
+              onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+              onDragLeave={(e) => { if (e.currentTarget === e.target) setDragActive(false); }}
+              onDrop={handleDrop}
+            >
+              {dragActive && (
+                <div style={{
+                  position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
+                  border: '2px dashed var(--app-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(110,118,255,0.08)', fontSize: 13, color: 'var(--app-accent)', fontWeight: 600, textAlign: 'center', padding: 16
+                }}>
+                  Drop files or folders to upload
+                </div>
+              )}
+              <div style={{ padding: 12, display: 'flex', gap: 8, borderBottom: '1px solid var(--app-border)' }}>
+                <button className="app-btn app-btn-secondary app-btn-sm" style={{ flex: 1 }} onClick={() => fileInputRef.current.click()}>Upload</button>
+                <button className="app-btn app-btn-secondary app-btn-sm" style={{ flex: 1 }} onClick={handleNewFile}>+ File</button>
+                <input ref={fileInputRef} type="file" multiple hidden onChange={handleUpload} />
+              </div>
+              <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+                <FileTree nodes={tree} activePath={activeFile} onOpenFile={openFile} onAction={handleTreeAction} />
+              </div>
+              <div style={{ padding: 10, borderTop: '1px solid var(--app-border)', fontSize: 12, color: 'var(--app-text-faint)' }}>
+                Entry: <strong style={{ color: 'var(--app-accent)' }}>{bot.entryFile || 'none'}</strong>
+                {activeFile && activeFile.split('/').pop() !== bot.entryFile && (
+                  <button className="app-btn app-btn-ghost app-btn-sm" style={{ marginLeft: 6, padding: '1px 6px' }} onClick={setAsEntry}>Set as entry</button>
+                )}
+              </div>
             </div>
           )}
-          <div style={{ padding: 12, display: 'flex', gap: 8, borderBottom: '1px solid var(--border)' }}>
-            <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => fileInputRef.current.click()}>upload</button>
-            <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={handleNewFile}>+ file</button>
-            <input ref={fileInputRef} type="file" multiple hidden onChange={handleUpload} />
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
-            <FileTree nodes={tree} activePath={activeFile} onOpenFile={openFile} onAction={handleTreeAction} />
-          </div>
-          <div style={{ padding: 10, borderTop: '1px solid var(--border)', fontSize: 12, color: 'var(--text-faint)' }}>
-            entry: <strong style={{ color: 'var(--amber)' }}>{bot.entryFile || 'none'}</strong>
-            {activeFile && activeFile.split('/').pop() !== bot.entryFile && (
-              <button className="btn btn-ghost btn-sm" style={{ marginLeft: 6, padding: '1px 6px' }} onClick={setAsEntry}>set as entry</button>
+
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            {tab === 'console' ? (
+              <LiveConsole botId={id} active={tab === 'console'} />
+            ) : tab === 'metrics' ? (
+              <MetricsPanel botId={id} running={bot.status === 'running'} />
+            ) : tab === 'startup' ? (
+              <StartupConfigPanel bot={bot} onUpdated={loadBot} />
+            ) : tab === 'settings' ? (
+              <BotSettingsPanel bot={bot} onUpdated={async () => { await loadBot(); await refreshBotList(); }} />
+            ) : tab === 'sftp' ? (
+              <SftpPanel botId={id} sftpUsername={bot.sftpUsername} onCredentialsChanged={loadBot} />
+            ) : activeFile ? (
+              <>
+                <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--app-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: 13, color: 'var(--app-text-dim)' }}>{activeFile}{dirty && <span style={{ color: 'var(--app-accent)' }}> &bull; unsaved</span>}</span>
+                  <button className="app-btn app-btn-primary app-btn-sm" onClick={saveFile} disabled={!dirty || busy}>Save</button>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <Editor
+                    height="100%"
+                    theme="vs-dark"
+                    language={langForFile(activeFile)}
+                    value={content}
+                    onChange={(v) => { setContent(v ?? ''); setDirty(true); }}
+                    options={{ fontSize: 13, minimap: { enabled: false }, automaticLayout: true, fontFamily: 'JetBrains Mono, monospace' }}
+                  />
+                </div>
+              </>
+            ) : (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--app-text-faint)', fontSize: 13 }}>
+                Select a file to edit, or upload your bot files
+              </div>
             )}
           </div>
         </div>
-
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-          {tab === 'console' ? (
-            <LiveConsole botId={id} active={tab === 'console'} />
-          ) : tab === 'metrics' ? (
-            <MetricsPanel botId={id} running={bot.status === 'running'} />
-          ) : tab === 'startup' ? (
-            <StartupConfigPanel bot={bot} onUpdated={loadBot} />
-          ) : tab === 'settings' ? (
-            <BotSettingsPanel bot={bot} onUpdated={loadBot} />
-          ) : tab === 'sftp' ? (
-            <SftpPanel botId={id} sftpUsername={bot.sftpUsername} onCredentialsChanged={loadBot} />
-          ) : activeFile ? (
-            <>
-              <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>{activeFile}{dirty && <span style={{ color: 'var(--amber)' }}> &bull; unsaved</span>}</span>
-                <button className="btn btn-primary btn-sm" onClick={saveFile} disabled={!dirty || busy}>save</button>
-              </div>
-              <div style={{ flex: 1 }}>
-                <Editor
-                  height="100%"
-                  theme="vs-dark"
-                  language={langForFile(activeFile)}
-                  value={content}
-                  onChange={(v) => { setContent(v ?? ''); setDirty(true); }}
-                  options={{ fontSize: 13, minimap: { enabled: false }, automaticLayout: true, fontFamily: 'JetBrains Mono, monospace' }}
-                />
-              </div>
-            </>
-          ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-faint)', fontSize: 13 }}>
-              select a file to edit, or upload your bot files
-            </div>
-          )}
-        </div>
       </div>
-    </div>
+    </AppShell>
   );
 }

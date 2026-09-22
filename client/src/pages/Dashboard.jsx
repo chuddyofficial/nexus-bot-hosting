@@ -1,97 +1,74 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AppNav from '../components/AppNav';
+import AppShell from '../components/AppShell';
 import CreateBotModal from '../components/CreateBotModal';
-import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useBots } from '../context/BotsContext';
 
 const RUNTIME_TAG = { python: 'PY', node: 'JS' };
 
 export default function Dashboard() {
-  const [bots, setBots] = useState([]);
-  const [limit, setLimit] = useState(5);
-  const [loading, setLoading] = useState(true);
+  const { bots, limit, loading, refresh } = useBots();
   const [showCreate, setShowCreate] = useState(false);
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  async function loadBots() {
-    setLoading(true);
-    const { data } = await api.get('/bots');
-    setBots(data.bots);
-    setLimit(data.limit);
-    setLoading(false);
-  }
-
-  useEffect(() => { loadBots(); }, []);
-
   return (
-    <div>
-      <AppNav />
-      <div className="container" style={{ padding: '32px 24px' }}>
+    <AppShell>
+      <div style={{ padding: '32px 40px', maxWidth: 1040, width: '100%', boxSizing: 'border-box' }}>
         {user && !user.emailVerified && (
-          <div className="alert alert-info">verify your email address to unlock all features</div>
+          <div className="app-alert app-alert-info">Verify your email address to unlock all features.</div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 24, flexWrap: 'wrap', gap: 12 }}>
           <div>
-            <div className="eyebrow" style={{ marginBottom: 6 }}>ls ~/bots</div>
-            <h1 style={{ margin: 0, fontSize: 24 }}>
-              {bots.length}<span style={{ color: 'var(--text-faint)' }}>/{limit}</span> slots used
+            <div className="app-eyebrow" style={{ marginBottom: 6 }}>Your bots</div>
+            <h1 style={{ fontSize: 26 }}>
+              {bots.length}<span style={{ color: 'var(--app-text-faint)' }}>/{limit}</span> slots used
             </h1>
           </div>
-          <button className="btn btn-primary" disabled={bots.length >= limit} onClick={() => setShowCreate(true)}>
-            + run create-bot
+          <button className="app-btn app-btn-primary" disabled={bots.length >= limit} onClick={() => setShowCreate(true)}>
+            + Create bot
           </button>
         </div>
 
         {loading ? (
-          <p className="prompt">loading…</p>
+          <p style={{ color: 'var(--app-text-dim)' }}>Loading…</p>
         ) : bots.length === 0 ? (
-          <div className="card" style={{ textAlign: 'center', padding: '52px 24px' }}>
-            <div style={{ fontSize: 13, color: 'var(--text-faint)', marginBottom: 4 }}>~/bots is empty</div>
-            <h3 style={{ margin: '0 0 16px', fontWeight: 600 }}>No bots deployed yet</h3>
-            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>run create-bot</button>
+          <div className="app-card" style={{ textAlign: 'center', padding: '56px 24px' }}>
+            <h3 style={{ marginBottom: 8, fontSize: 17 }}>No bots yet</h3>
+            <p style={{ color: 'var(--app-text-dim)', fontSize: 13.5, marginBottom: 20 }}>
+              Create your first bot to get a Python or Node.js runtime with its own container.
+            </p>
+            <button className="app-btn app-btn-primary" onClick={() => setShowCreate(true)}>Create your first bot</button>
           </div>
         ) : (
-          <div style={{ border: '1px solid var(--border)' }}>
-            <div style={{
-              display: 'grid', gridTemplateColumns: '28px 1fr 100px 140px 1fr',
-              gap: 12, padding: '9px 16px', fontSize: 11, color: 'var(--text-faint)',
-              textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)'
-            }}>
-              <span></span>
-              <span>name</span>
-              <span>runtime</span>
-              <span>status</span>
-              <span>entry</span>
-            </div>
-            {bots.map((bot, i) => (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+            {bots.map((bot) => (
               <div
                 key={bot.id}
+                className="app-card"
+                style={{ cursor: 'pointer', transition: 'border-color 0.12s ease' }}
                 onClick={() => navigate(`/bots/${bot.id}`)}
-                style={{
-                  display: 'grid', gridTemplateColumns: '28px 1fr 100px 140px 1fr',
-                  gap: 12, padding: '13px 16px', alignItems: 'center',
-                  borderTop: i === 0 ? 'none' : '1px solid var(--border)',
-                  cursor: 'pointer', fontSize: 13, transition: 'background 0.1s ease'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface)'}
-                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--app-border-bright)'}
+                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--app-border)'}
               >
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  width: 22, height: 22, borderRadius: 2, fontSize: 10, fontWeight: 800,
-                  background: 'var(--surface-2)', color: 'var(--text-dim)', border: '1px solid var(--border-bright)'
-                }}>
-                  {RUNTIME_TAG[bot.runtime]}
-                </span>
-                <span style={{ fontWeight: 600 }}>{bot.name}</span>
-                <span style={{ color: 'var(--text-dim)' }}>{bot.runtime}</span>
-                <span className={`badge badge-${bot.status}`} style={{ justifySelf: 'start' }}>
-                  <span className="dot" />{bot.status}
-                </span>
-                <span style={{ color: 'var(--text-faint)' }}>{bot.entryFile || '—'}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 34, height: 34, borderRadius: 8, fontSize: 11, fontWeight: 800,
+                    background: 'var(--app-surface-2)', color: 'var(--app-text-dim)'
+                  }}>
+                    {RUNTIME_TAG[bot.runtime]}
+                  </span>
+                  <span className={`app-badge app-badge-${bot.status}`}>
+                    <span className="app-dot" />{bot.status}
+                  </span>
+                </div>
+                <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>{bot.name}</div>
+                <div style={{ fontSize: 12.5, color: 'var(--app-text-faint)' }}>
+                  {bot.entryFile || 'no entry file set'}
+                </div>
               </div>
             ))}
           </div>
@@ -101,9 +78,9 @@ export default function Dashboard() {
       {showCreate && (
         <CreateBotModal
           onClose={() => setShowCreate(false)}
-          onCreated={(bot) => { setShowCreate(false); navigate(`/bots/${bot.id}`); }}
+          onCreated={async (bot) => { setShowCreate(false); await refresh(); navigate(`/bots/${bot.id}`); }}
         />
       )}
-    </div>
+    </AppShell>
   );
 }

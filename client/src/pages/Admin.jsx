@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import AppNav from '../components/AppNav';
+import AppShell from '../components/AppShell';
 import api from '../api/client';
 
 export default function Admin() {
@@ -88,100 +88,99 @@ export default function Admin() {
   }
 
   return (
-    <div>
-      <AppNav />
-      <div className="container" style={{ padding: '32px 24px' }}>
-        <div className="eyebrow" style={{ marginBottom: 6 }}>admin --panel</div>
-        <h1 style={{ margin: '0 0 20px', fontSize: 24 }}>platform control</h1>
+    <AppShell>
+      <div style={{ padding: '32px 40px', maxWidth: 1080 }}>
+        <div className="app-eyebrow" style={{ marginBottom: 6 }}>Admin</div>
+        <h1 style={{ fontSize: 24, marginBottom: 20 }}>Platform control</h1>
 
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && <div className="app-alert app-alert-error">{error}</div>}
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-          <button className={`btn btn-sm ${tab === 'users' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('users')}>
-            users ({users.length})
+          <button className={`app-btn app-btn-sm ${tab === 'users' ? 'app-btn-primary' : 'app-btn-secondary'}`} onClick={() => setTab('users')}>
+            Users ({users.length})
           </button>
-          <button className={`btn btn-sm ${tab === 'bots' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('bots')}>
-            bots ({bots.length})
+          <button className={`app-btn app-btn-sm ${tab === 'bots' ? 'app-btn-primary' : 'app-btn-secondary'}`} onClick={() => setTab('bots')}>
+            Bots ({bots.length})
           </button>
         </div>
 
         {loading ? (
-          <p className="prompt">loading…</p>
+          <p style={{ color: 'var(--app-text-dim)' }}>Loading…</p>
         ) : tab === 'users' ? (
-          <div style={{ border: '1px solid var(--border)', overflowX: 'auto' }}>
+          <div className="app-card" style={{ padding: 0, overflowX: 'auto' }}>
             <div style={{
               display: 'grid', gridTemplateColumns: '1.6fr 1fr 70px 70px 90px 1fr', gap: 12,
-              padding: '9px 16px', fontSize: 11, color: 'var(--text-faint)',
-              textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)',
+              padding: '11px 18px', fontSize: 11, color: 'var(--app-text-faint)',
+              textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--app-border)',
               minWidth: 760
             }}>
-              <span>email</span>
-              <span>username</span>
-              <span>bots</span>
-              <span>admin</span>
-              <span>status</span>
-              <span>actions</span>
+              <span>Email</span>
+              <span>Username</span>
+              <span>Bots</span>
+              <span>Admin</span>
+              <span>Status</span>
+              <span>Actions</span>
             </div>
             {users.map((u, i) => (
               <div key={u.id} style={{
                 display: 'grid', gridTemplateColumns: '1.6fr 1fr 70px 70px 90px 1fr', gap: 12,
-                padding: '11px 16px', alignItems: 'center', fontSize: 13,
-                borderTop: i === 0 ? 'none' : '1px solid var(--border)', minWidth: 760
+                padding: '12px 18px', alignItems: 'center', fontSize: 13,
+                borderTop: i === 0 ? 'none' : '1px solid var(--app-border)', minWidth: 760
               }}>
                 <span>{u.email}</span>
-                <span style={{ color: 'var(--text-dim)' }}>{u.username || '—'}</span>
+                <span style={{ color: 'var(--app-text-dim)' }}>{u.username || '—'}</span>
                 <span>{u.botCount}{u.botLimitOverride != null ? `/${u.botLimitOverride}` : ''}</span>
-                <span>{u.isAdmin ? <span className="badge badge-created">admin</span> : '—'}</span>
-                <span className={`badge ${u.disabled ? 'badge-error' : 'badge-running'}`}>
-                  <span className="dot" />{u.disabled ? 'disabled' : 'active'}
+                <span>{u.isAdmin ? <span className="app-badge app-badge-created">Admin</span> : '—'}</span>
+                <span className={`app-badge ${u.disabled ? 'app-badge-error' : 'app-badge-running'}`}>
+                  <span className="app-dot" />{u.disabled ? 'Disabled' : 'Active'}
                 </span>
                 <span style={{ display: 'flex', gap: 6 }}>
-                  <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }} onClick={() => editLimit(u)}>limit</button>
-                  <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }} onClick={() => toggleDisabled(u)}>
-                    {u.disabled ? 'enable' : 'disable'}
+                  <button className="app-btn app-btn-ghost app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => editLimit(u)}>Limit</button>
+                  <button className="app-btn app-btn-ghost app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => toggleDisabled(u)}>
+                    {u.disabled ? 'Enable' : 'Disable'}
                   </button>
                   {!u.isAdmin && (
-                    <button className="btn btn-danger btn-sm" style={{ padding: '2px 8px' }} onClick={() => deleteUser(u)}>delete</button>
+                    <button className="app-btn app-btn-danger app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => deleteUser(u)}>Delete</button>
                   )}
                 </span>
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ border: '1px solid var(--border)', overflowX: 'auto' }}>
+          <div className="app-card" style={{ padding: 0, overflowX: 'auto' }}>
             <div style={{
               display: 'grid', gridTemplateColumns: '1.4fr 1.4fr 90px 110px 1fr', gap: 12,
-              padding: '9px 16px', fontSize: 11, color: 'var(--text-faint)',
-              textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--border)',
+              padding: '11px 18px', fontSize: 11, color: 'var(--app-text-faint)',
+              textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid var(--app-border)',
               minWidth: 700
             }}>
-              <span>bot</span>
-              <span>owner</span>
-              <span>runtime</span>
-              <span>status</span>
-              <span>actions</span>
+              <span>Bot</span>
+              <span>Owner</span>
+              <span>Runtime</span>
+              <span>Status</span>
+              <span>Actions</span>
             </div>
             {bots.map((bot, i) => (
               <div key={bot.id} style={{
                 display: 'grid', gridTemplateColumns: '1.4fr 1.4fr 90px 110px 1fr', gap: 12,
-                padding: '11px 16px', alignItems: 'center', fontSize: 13,
-                borderTop: i === 0 ? 'none' : '1px solid var(--border)', minWidth: 700
+                padding: '12px 18px', alignItems: 'center', fontSize: 13,
+                borderTop: i === 0 ? 'none' : '1px solid var(--app-border)', minWidth: 700
               }}>
                 <span style={{ fontWeight: 600 }}>{bot.name}</span>
-                <span style={{ color: 'var(--text-dim)' }}>{bot.ownerEmail}</span>
+                <span style={{ color: 'var(--app-text-dim)' }}>{bot.ownerEmail}</span>
                 <span>{bot.runtime}</span>
-                <span className={`badge badge-${bot.status}`}><span className="dot" />{bot.status}</span>
+                <span className={`app-badge app-badge-${bot.status}`}><span className="app-dot" />{bot.status}</span>
                 <span style={{ display: 'flex', gap: 6 }}>
                   {bot.status === 'running' && (
-                    <button className="btn btn-ghost btn-sm" style={{ padding: '2px 8px' }} onClick={() => stopBot(bot)}>stop</button>
+                    <button className="app-btn app-btn-ghost app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => stopBot(bot)}>Stop</button>
                   )}
-                  <button className="btn btn-danger btn-sm" style={{ padding: '2px 8px' }} onClick={() => deleteBot(bot)}>delete</button>
+                  <button className="app-btn app-btn-danger app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => deleteBot(bot)}>Delete</button>
                 </span>
               </div>
             ))}
           </div>
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }

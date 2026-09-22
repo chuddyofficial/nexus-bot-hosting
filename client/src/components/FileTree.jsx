@@ -34,17 +34,17 @@ function TreeNode({ node, activePath, onOpenFile, onAction, depth }) {
           display: 'flex', alignItems: 'center', gap: 7,
           padding: '5px 8px', paddingLeft: 8 + depth * 14,
           borderRadius: 2, cursor: 'pointer', fontSize: 13,
-          background: isActive ? 'var(--amber-glow)' : 'transparent',
-          color: isActive ? 'var(--amber)' : 'var(--text-dim)'
+          background: isActive ? 'var(--app-accent-glow)' : 'transparent',
+          color: isActive ? 'var(--app-accent)' : 'var(--app-text-dim)'
         }}
         onContextMenu={(e) => { e.preventDefault(); onAction('menu', node, { x: e.clientX, y: e.clientY }); }}
       >
         {node.type === 'dir' ? (
-          <span style={{ width: 10, fontSize: 10, color: 'var(--text-faint)' }}>{open ? '▾' : '▸'}</span>
+          <span style={{ width: 10, fontSize: 10, color: 'var(--app-text-faint)' }}>{open ? '▾' : '▸'}</span>
         ) : (
           <span style={{
             width: 26, fontSize: 9, fontWeight: 800, textAlign: 'center',
-            color: 'var(--text-faint)', letterSpacing: '0.02em'
+            color: 'var(--app-text-faint)', letterSpacing: '0.02em'
           }}>
             {tag || '·'}
           </span>
@@ -52,15 +52,15 @@ function TreeNode({ node, activePath, onOpenFile, onAction, depth }) {
         <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{node.name}</span>
         {node.type === 'file' && node.name.endsWith('.zip') && (
           <button
-            className="btn btn-ghost btn-sm"
+            className="app-btn app-btn-ghost app-btn-sm"
             style={{ padding: '2px 8px', fontSize: 11 }}
             onClick={(e) => { e.stopPropagation(); onAction('extract', node); }}
           >
-            unzip
+            Unzip
           </button>
         )}
         <button
-          className="btn btn-ghost btn-sm"
+          className="app-btn app-btn-ghost app-btn-sm"
           style={{ padding: '2px 6px', fontSize: 11 }}
           onClick={(e) => { e.stopPropagation(); onAction('delete', node); }}
         >
