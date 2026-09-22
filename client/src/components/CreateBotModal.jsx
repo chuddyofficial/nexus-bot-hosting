@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../api/client';
+import Modal from './ui/Modal';
 
 export default function CreateBotModal({ onClose, onCreated }) {
   const [name, setName] = useState('');
@@ -22,37 +23,35 @@ export default function CreateBotModal({ onClose, onCreated }) {
   }
 
   return (
-    <div className="app-scope" style={overlayStyle} onClick={onClose}>
-      <div className="app-card" style={{ width: '100%', maxWidth: 440 }} onClick={(e) => e.stopPropagation()}>
-        <h2 style={{ fontSize: 18, marginBottom: 4 }}>Create a bot</h2>
-        <p style={{ color: 'var(--app-text-dim)', fontSize: 13, marginTop: 0, marginBottom: 20 }}>
-          Choose a name and a runtime for your bot's container.
-        </p>
+    <Modal onClose={onClose}>
+      <h2 style={{ fontSize: 18, marginBottom: 4 }}>Create a bot</h2>
+      <p style={{ color: 'var(--app-text-dim)', fontSize: 13, marginTop: 0, marginBottom: 20 }}>
+        Choose a name and a runtime for your bot's container.
+      </p>
 
-        {error && <div className="app-alert app-alert-error">{error}</div>}
+      {error && <div className="app-alert app-alert-error">{error}</div>}
 
-        <div className="app-field">
-          <label className="app-field-label">Bot name</label>
-          <input className="app-input" value={name} onChange={(e) => setName(e.target.value)}
-            placeholder="my-discord-bot" maxLength={32} />
-        </div>
+      <div className="app-field">
+        <label className="app-field-label">Bot name</label>
+        <input className="app-input" value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="my-discord-bot" maxLength={32} />
+      </div>
 
-        <div className="app-field">
-          <label className="app-field-label">Runtime</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <RuntimeCard label="Python" sub="python:3.12-slim" active={runtime === 'python'} onClick={() => setRuntime('python')} tag="PY" />
-            <RuntimeCard label="Node.js" sub="node:20-slim" active={runtime === 'node'} onClick={() => setRuntime('node')} tag="JS" />
-          </div>
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
-          <button className="app-btn app-btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="app-btn app-btn-primary" onClick={handleCreate} disabled={loading || !name || !runtime}>
-            {loading ? 'Creating…' : 'Create bot'}
-          </button>
+      <div className="app-field">
+        <label className="app-field-label">Runtime</label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          <RuntimeCard label="Python" sub="python:3.12-slim" active={runtime === 'python'} onClick={() => setRuntime('python')} tag="PY" />
+          <RuntimeCard label="Node.js" sub="node:20-slim" active={runtime === 'node'} onClick={() => setRuntime('node')} tag="JS" />
         </div>
       </div>
-    </div>
+
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
+        <button className="app-btn app-btn-ghost" onClick={onClose}>Cancel</button>
+        <button className="app-btn app-btn-primary" onClick={handleCreate} disabled={loading || !name || !runtime}>
+          {loading ? 'Creating…' : 'Create bot'}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
@@ -83,8 +82,3 @@ function RuntimeCard({ label, sub, active, onClick, tag }) {
     </div>
   );
 }
-
-const overlayStyle = {
-  position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, zIndex: 100
-};

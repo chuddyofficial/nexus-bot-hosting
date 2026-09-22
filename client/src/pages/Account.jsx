@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import AppShell from '../components/AppShell';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export default function Account() {
   const { user, refresh, logout } = useAuth();
@@ -27,8 +28,8 @@ function ProfileSection({ user, onUpdated }) {
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [username, setUsername] = useState(user?.username || '');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   async function save(e) {
     e.preventDefault();
@@ -37,8 +38,7 @@ function ProfileSection({ user, onUpdated }) {
     try {
       await api.put('/auth/account/profile', { displayName, username: username || null });
       await onUpdated();
-      setSuccess('Saved.');
-      setTimeout(() => setSuccess(''), 2000);
+      toast.success('Profile saved.');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save.');
     } finally {
@@ -51,7 +51,6 @@ function ProfileSection({ user, onUpdated }) {
       <div className="app-eyebrow" style={{ marginBottom: 4 }}>Profile</div>
       <h3 style={{ fontSize: 15, marginBottom: 16 }}>Display name &amp; username</h3>
       {error && <div className="app-alert app-alert-error">{error}</div>}
-      {success && <div className="app-alert app-alert-success">{success}</div>}
       <form onSubmit={save}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
           <div className="app-field" style={{ marginBottom: 0 }}>
@@ -125,8 +124,8 @@ function PasswordSection() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   async function submit(e) {
     e.preventDefault();
@@ -136,8 +135,7 @@ function PasswordSection() {
       await api.put('/auth/account/password', { currentPassword, newPassword });
       setCurrentPassword('');
       setNewPassword('');
-      setSuccess('Password updated.');
-      setTimeout(() => setSuccess(''), 2000);
+      toast.success('Password updated.');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to update password.');
     } finally {
@@ -150,7 +148,6 @@ function PasswordSection() {
       <div className="app-eyebrow" style={{ marginBottom: 4 }}>Security</div>
       <h3 style={{ fontSize: 15, marginBottom: 16 }}>Change password</h3>
       {error && <div className="app-alert app-alert-error">{error}</div>}
-      {success && <div className="app-alert app-alert-success">{success}</div>}
       <form onSubmit={submit}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
           <div className="app-field" style={{ marginBottom: 0 }}>

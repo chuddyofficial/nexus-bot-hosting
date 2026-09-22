@@ -1,13 +1,26 @@
 import { useEffect, useState } from 'react';
 import AppShell from '../components/AppShell';
+import Card from '../components/ui/Card';
+import StatusBadge from '../components/ui/StatusBadge';
+import ConfirmModal from '../components/ui/ConfirmModal';
+import Modal from '../components/ui/Modal';
+import { SkeletonCard } from '../components/ui/Skeleton';
 import api from '../api/client';
+import { useToast } from '../context/ToastContext';
 
 export default function Admin() {
   const [tab, setTab] = useState('users');
   const [users, setUsers] = useState([]);
   const [bots, setBots] = useState([]);
+  const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [limitModal, setLimitModal] = useState(null);
+  const [limitValue, setLimitValue] = useState('');
+  const [confirmDeleteUser, setConfirmDeleteUser] = useState(null);
+  const [confirmDeleteBot, setConfirmDeleteBot] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   async function loadUsers() {
     const { data } = await api.get('/admin/users');
@@ -19,11 +32,16 @@ export default function Admin() {
     setBots(data.bots);
   }
 
+  async function loadOverview() {
+    const { data } = await api.get('/admin/overview');
+    setOverview(data);
+  }
+
   async function loadAll() {
     setLoading(true);
     setError('');
     try {
-      await Promise.all([loadUsers(), loadBots()]);
+      await Promise.all([loadUsers(), loadBots(), loadOverview()]);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load admin data.');
     } finally {
@@ -38,31 +56,43 @@ export default function Admin() {
     try {
       await api.post(`/admin/users/${u.id}/${u.disabled ? 'enable' : 'disable'}`);
       await loadUsers();
+      toast.success(u.disabled ? `${u.email} enabled.` : `${u.email} disabled.`);
     } catch (err) {
       setError(err.response?.data?.error || 'Action failed.');
     }
   }
 
-  async function editLimit(u) {
-    const input = prompt(`Bot limit override for ${u.email} (blank = default limit):`, u.botLimitOverride ?? '');
-    if (input === null) return;
+  function openLimitModal(u) {
+    setLimitValue(u.botLimitOverride ?? '');
+    setLimitModal(u);
+  }
+
+  async function submitLimit(e) {
+    e.preventDefault();
     setError('');
     try {
-      await api.put(`/admin/users/${u.id}/bot-limit`, { limit: input.trim() === '' ? null : input.trim() });
+      await api.put(`/admin/users/${limitModal.id}/bot-limit`, { limit: limitValue.trim() === '' ? null : limitValue.trim() });
       await loadUsers();
+      toast.success(`Bot limit updated for ${limitModal.email}.`);
+      setLimitModal(null);
     } catch (err) {
       setError(err.response?.data?.error || 'Action failed.');
     }
   }
 
-  async function deleteUser(u) {
-    if (!confirm(`Permanently delete "${u.email}" and all their bots? This cannot be undone.`)) return;
+  async function deleteUserNow() {
+    const u = confirmDeleteUser;
+    setBusy(true);
     setError('');
     try {
       await api.delete(`/admin/users/${u.id}`);
       await loadAll();
+      toast.success(`${u.email} deleted.`);
     } catch (err) {
       setError(err.response?.data?.error || 'Action failed.');
+    } finally {
+      setBusy(false);
+      setConfirmDeleteUser(null);
     }
   }
 
@@ -71,19 +101,25 @@ export default function Admin() {
     try {
       await api.post(`/admin/bots/${bot.id}/stop`);
       await loadBots();
+      toast.success(`${bot.name} stopped.`);
     } catch (err) {
       setError(err.response?.data?.error || 'Action failed.');
     }
   }
 
-  async function deleteBot(bot) {
-    if (!confirm(`Permanently delete "${bot.name}" (owned by ${bot.ownerEmail})?`)) return;
+  async function deleteBotNow() {
+    const bot = confirmDeleteBot;
+    setBusy(true);
     setError('');
     try {
       await api.delete(`/admin/bots/${bot.id}`);
       await loadBots();
+      toast.success(`${bot.name} deleted.`);
     } catch (err) {
       setError(err.response?.data?.error || 'Action failed.');
+    } finally {
+      setBusy(false);
+      setConfirmDeleteBot(null);
     }
   }
 
@@ -95,6 +131,20 @@ export default function Admin() {
 
         {error && <div className="app-alert app-alert-error">{error}</div>}
 
+        {loading ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 24 }}>
+            <SkeletonCard lines={1} /><SkeletonCard lines={1} /><SkeletonCard lines={1} /><SkeletonCard lines={1} /><SkeletonCard lines={1} />
+          </div>
+        ) : overview && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 24 }}>
+            <StatTile label="Total users" value={overview.totalUsers} />
+            <StatTile label="Disabled" value={overview.disabledUsers} accent={overview.disabledUsers > 0 ? 'var(--app-warn)' : undefined} />
+            <StatTile label="Total bots" value={overview.totalBots} />
+            <StatTile label="Running" value={overview.runningBots} accent="var(--app-ok)" />
+            <StatTile label="CPU / Memory" value={`${overview.cpuPercent}% · ${overview.memoryUsedMb}MB`} />
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
           <button className={`app-btn app-btn-sm ${tab === 'users' ? 'app-btn-primary' : 'app-btn-secondary'}`} onClick={() => setTab('users')}>
             Users ({users.length})
@@ -105,9 +155,12 @@ export default function Admin() {
         </div>
 
         {loading ? (
-          <p style={{ color: 'var(--app-text-dim)' }}>Loading…</p>
+          <SkeletonCard lines={4} />
         ) : tab === 'users' ? (
-          <div className="app-card" style={{ padding: 0, overflowX: 'auto' }}>
+          users.length === 0 ? (
+            <Card style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--app-text-dim)' }}>No users yet.</Card>
+          ) : (
+          <Card style={{ padding: 0, overflowX: 'auto' }}>
             <div style={{
               display: 'grid', gridTemplateColumns: '1.6fr 1fr 70px 70px 90px 1fr', gap: 12,
               padding: '11px 18px', fontSize: 11, color: 'var(--app-text-faint)',
@@ -131,23 +184,24 @@ export default function Admin() {
                 <span style={{ color: 'var(--app-text-dim)' }}>{u.username || '—'}</span>
                 <span>{u.botCount}{u.botLimitOverride != null ? `/${u.botLimitOverride}` : ''}</span>
                 <span>{u.isAdmin ? <span className="app-badge app-badge-created">Admin</span> : '—'}</span>
-                <span className={`app-badge ${u.disabled ? 'app-badge-error' : 'app-badge-running'}`}>
-                  <span className="app-dot" />{u.disabled ? 'Disabled' : 'Active'}
-                </span>
+                <StatusBadge status={u.disabled ? 'error' : 'running'} style={{ width: 'fit-content' }} />
                 <span style={{ display: 'flex', gap: 6 }}>
-                  <button className="app-btn app-btn-ghost app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => editLimit(u)}>Limit</button>
+                  <button className="app-btn app-btn-ghost app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => openLimitModal(u)}>Limit</button>
                   <button className="app-btn app-btn-ghost app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => toggleDisabled(u)}>
                     {u.disabled ? 'Enable' : 'Disable'}
                   </button>
                   {!u.isAdmin && (
-                    <button className="app-btn app-btn-danger app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => deleteUser(u)}>Delete</button>
+                    <button className="app-btn app-btn-danger app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => setConfirmDeleteUser(u)}>Delete</button>
                   )}
                 </span>
               </div>
             ))}
-          </div>
+          </Card>
+          )
+        ) : bots.length === 0 ? (
+          <Card style={{ textAlign: 'center', padding: '40px 24px', color: 'var(--app-text-dim)' }}>No bots on the platform yet.</Card>
         ) : (
-          <div className="app-card" style={{ padding: 0, overflowX: 'auto' }}>
+          <Card style={{ padding: 0, overflowX: 'auto' }}>
             <div style={{
               display: 'grid', gridTemplateColumns: '1.4fr 1.4fr 90px 110px 1fr', gap: 12,
               padding: '11px 18px', fontSize: 11, color: 'var(--app-text-faint)',
@@ -169,18 +223,66 @@ export default function Admin() {
                 <span style={{ fontWeight: 600 }}>{bot.name}</span>
                 <span style={{ color: 'var(--app-text-dim)' }}>{bot.ownerEmail}</span>
                 <span>{bot.runtime}</span>
-                <span className={`app-badge app-badge-${bot.status}`}><span className="app-dot" />{bot.status}</span>
+                <StatusBadge status={bot.status} style={{ width: 'fit-content' }} />
                 <span style={{ display: 'flex', gap: 6 }}>
                   {bot.status === 'running' && (
                     <button className="app-btn app-btn-ghost app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => stopBot(bot)}>Stop</button>
                   )}
-                  <button className="app-btn app-btn-danger app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => deleteBot(bot)}>Delete</button>
+                  <button className="app-btn app-btn-danger app-btn-sm" style={{ padding: '2px 8px' }} onClick={() => setConfirmDeleteBot(bot)}>Delete</button>
                 </span>
               </div>
             ))}
-          </div>
+          </Card>
         )}
       </div>
+
+      {limitModal && (
+        <Modal onClose={() => setLimitModal(null)} maxWidth={380}>
+          <form onSubmit={submitLimit}>
+            <h2 style={{ fontSize: 16, marginBottom: 4 }}>Bot limit override</h2>
+            <p style={{ color: 'var(--app-text-dim)', fontSize: 13, marginTop: 0, marginBottom: 16 }}>{limitModal.email}</p>
+            <div className="app-field">
+              <label className="app-field-label">Limit (blank = platform default)</label>
+              <input className="app-input" autoFocus type="number" min="0" value={limitValue} onChange={(e) => setLimitValue(e.target.value)} placeholder="5" />
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+              <button type="button" className="app-btn app-btn-ghost" onClick={() => setLimitModal(null)}>Cancel</button>
+              <button type="submit" className="app-btn app-btn-primary">Save</button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {confirmDeleteUser && (
+        <ConfirmModal
+          title={`Delete "${confirmDeleteUser.email}"?`}
+          message="This permanently deletes the user and all their bots and containers. This cannot be undone."
+          confirmLabel="Delete user"
+          busy={busy}
+          onConfirm={deleteUserNow}
+          onCancel={() => setConfirmDeleteUser(null)}
+        />
+      )}
+
+      {confirmDeleteBot && (
+        <ConfirmModal
+          title={`Delete "${confirmDeleteBot.name}"?`}
+          message={`Owned by ${confirmDeleteBot.ownerEmail}. This permanently deletes the bot and its files.`}
+          confirmLabel="Delete bot"
+          busy={busy}
+          onConfirm={deleteBotNow}
+          onCancel={() => setConfirmDeleteBot(null)}
+        />
+      )}
     </AppShell>
+  );
+}
+
+function StatTile({ label, value, accent }) {
+  return (
+    <Card style={{ padding: '14px 16px' }}>
+      <div style={{ fontSize: 20, fontWeight: 700, color: accent || 'var(--app-text)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: 10.5, color: 'var(--app-text-faint)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: 2 }}>{label}</div>
+    </Card>
   );
 }

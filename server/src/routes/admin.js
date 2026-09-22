@@ -10,6 +10,32 @@ const emailService = require('../services/emailService');
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
 
+// --- Overview ---
+
+router.get('/overview', async (req, res) => {
+  const users = User.listAll();
+  const bots = Bot.listAll();
+  const running = bots.filter((b) => b.status === 'running');
+
+  let cpuTotal = 0;
+  let memTotal = 0;
+  await Promise.all(running.map(async (bot) => {
+    try {
+      const stats = await dockerService.getStats(bot.container_name);
+      if (stats) { cpuTotal += stats.cpuPercent; memTotal += stats.memoryUsedMb; }
+    } catch { /* container may be mid-transition; skip */ }
+  }));
+
+  res.json({
+    totalUsers: users.length,
+    disabledUsers: users.filter((u) => u.disabled).length,
+    totalBots: bots.length,
+    runningBots: running.length,
+    cpuPercent: Math.round(cpuTotal * 10) / 10,
+    memoryUsedMb: Math.round(memTotal)
+  });
+});
+
 // --- Users ---
 
 router.get('/users', (req, res) => {

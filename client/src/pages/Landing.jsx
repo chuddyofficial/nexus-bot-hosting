@@ -20,8 +20,38 @@ const RUNTIMES = [
   { cmd: 'price', val: '$0 / 5 bots', note: 'no card, no trial clock' }
 ];
 
+const FEATURES = [
+  { tag: '01', title: 'Isolated containers', desc: 'Every bot gets its own Docker container — its own filesystem, process tree, and resource caps. Nothing shared with other users.' },
+  { tag: '02', title: 'In-browser editor', desc: 'Full Monaco (the VS Code editor) right in the dashboard. Syntax highlighting, no local setup, no SSH required.' },
+  { tag: '03', title: 'Live streaming console', desc: 'Real-time log output over WebSocket the moment your bot starts — not a refresh-to-poll log viewer.' },
+  { tag: '04', title: 'Drag-and-drop deploy', desc: 'Drop files or whole folders onto the dashboard, or upload a .zip and extract it in place.' },
+  { tag: '05', title: 'SFTP access', desc: 'Prefer WinSCP or FileZilla? Every bot gets its own chrooted SFTP login, scoped to just that bot\'s folder.' },
+  { tag: '06', title: 'Resource metrics', desc: 'Live CPU and memory graphs per bot, polled straight from the container runtime — know what your bot is actually using.' },
+  { tag: '07', title: 'Configurable startup', desc: 'Custom start commands, pre-start hooks (pip install, npm install), and restart policies — never / on-crash / always.' },
+  { tag: '08', title: 'Per-bot database', desc: "Each bot's SQLite file lives in its own folder. No shared tables, no cross-bot data ever." }
+];
+
+const STEPS = [
+  { n: '1', title: 'Create an account', desc: 'Sign up with an email and password. No card, no trial clock — five bot slots from the start.' },
+  { n: '2', title: 'Pick a runtime & upload', desc: 'Choose Python or Node.js, then drag your code in, upload a .zip, or connect over SFTP.' },
+  { n: '3', title: 'Start your bot', desc: 'Hit start. Your bot boots in its own container and you watch it live in the streaming console.' }
+];
+
+function useMedia(query) {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(query);
+    const onChange = () => setMatches(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
+
 export default function Landing() {
   const [visibleLines, setVisibleLines] = useState(0);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const isMobile = useMedia('(max-width: 760px)');
 
   useEffect(() => {
     if (visibleLines >= BOOT_LINES.length) return;
@@ -29,14 +59,45 @@ export default function Landing() {
     return () => clearTimeout(t);
   }, [visibleLines]);
 
+  useEffect(() => { if (!isMobile) setDrawerOpen(false); }, [isMobile]);
+
   return (
     <div className="landing-scope" style={{ minHeight: '100%' }}>
-      <nav className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border)' }}>
+      <nav className="container" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px', borderBottom: '1px solid var(--border)', position: 'relative' }}>
         <Logo size={32} />
-        <div style={{ display: 'flex', gap: 8 }}>
+
+        <div className="landing-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
+          <a href="#features" className="prompt" style={{ fontSize: 13 }}>features</a>
+          <a href="#how-it-works" className="prompt" style={{ fontSize: 13 }}>docs</a>
+          <a href="#status" className="prompt" style={{ fontSize: 13 }}>status</a>
+        </div>
+
+        <div className="landing-nav-actions" style={{ display: 'flex', gap: 8 }}>
           <Link to="/login" className="btn btn-ghost btn-sm">log in</Link>
           <Link to="/signup" className="btn btn-primary btn-sm">create account</Link>
         </div>
+
+        <button
+          className="landing-nav-toggle btn btn-ghost btn-sm"
+          aria-label="Toggle menu"
+          aria-expanded={drawerOpen}
+          onClick={() => setDrawerOpen((v) => !v)}
+          style={{ display: 'none' }}
+        >
+          {drawerOpen ? '✕' : '☰'}
+        </button>
+
+        {drawerOpen && (
+          <div className="landing-nav-drawer">
+            <a href="#features" className="prompt" onClick={() => setDrawerOpen(false)}>features</a>
+            <a href="#how-it-works" className="prompt" onClick={() => setDrawerOpen(false)}>docs</a>
+            <a href="#status" className="prompt" onClick={() => setDrawerOpen(false)}>status</a>
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <Link to="/login" className="btn btn-ghost btn-sm" style={{ flex: 1 }}>log in</Link>
+              <Link to="/signup" className="btn btn-primary btn-sm" style={{ flex: 1 }}>create account</Link>
+            </div>
+          </div>
+        )}
       </nav>
 
       <header className="container" style={{ padding: '64px 24px 40px', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(280px, 420px)', gap: 48, alignItems: 'start' }}>
@@ -90,9 +151,9 @@ export default function Landing() {
         </div>
       </header>
 
-      <section className="container" style={{ padding: '20px 24px 80px' }}>
+      <section id="features" className="container" style={{ padding: '20px 24px 80px' }}>
         <div className="eyebrow" style={{ marginBottom: 12 }}>spec</div>
-        <div style={{ border: '1px solid var(--border)' }}>
+        <div style={{ border: '1px solid var(--border)', marginBottom: 56 }}>
           {RUNTIMES.map((r, i) => (
             <div
               key={r.cmd}
@@ -105,12 +166,87 @@ export default function Landing() {
                 fontSize: 13,
                 alignItems: 'baseline'
               }}
+              className="landing-spec-row"
             >
               <span style={{ color: 'var(--text-faint)' }}>{r.cmd}</span>
               <span style={{ color: 'var(--amber)', fontWeight: 600 }}>{r.val}</span>
               <span style={{ color: 'var(--text-dim)' }}>{r.note}</span>
             </div>
           ))}
+        </div>
+
+        <div className="eyebrow" style={{ marginBottom: 12 }}>features</div>
+        <div className="landing-feature-grid">
+          {FEATURES.map((f) => (
+            <div key={f.tag} className="card">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                <span style={{ fontSize: 11, color: 'var(--amber-dim)', fontWeight: 700 }}>{f.tag}</span>
+                <h3 style={{ fontSize: 14.5, margin: 0 }}>{f.title}</h3>
+              </div>
+              <p style={{ fontSize: 12.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.7 }}>{f.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="how-it-works" className="container" style={{ padding: '0 24px 80px' }}>
+        <div className="eyebrow" style={{ marginBottom: 12 }}>how it works</div>
+        <div className="landing-steps">
+          {STEPS.map((s, i) => (
+            <div key={s.n} style={{ display: 'flex', gap: 16 }}>
+              <div style={{
+                width: 34, height: 34, borderRadius: '50%', border: '1px solid var(--border-bright)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                fontSize: 14, fontWeight: 700, color: 'var(--amber)'
+              }}>
+                {s.n}
+              </div>
+              <div>
+                <h3 style={{ fontSize: 14.5, margin: '4px 0 6px' }}>{s.title}</h3>
+                <p style={{ fontSize: 12.5, color: 'var(--text-dim)', margin: 0, lineHeight: 1.7, maxWidth: 320 }}>{s.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="container" style={{ padding: '0 24px 80px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <div className="card">
+          <div className="eyebrow" style={{ marginBottom: 10 }}>security</div>
+          <h2 style={{ fontSize: 18, margin: '0 0 12px' }}>Isolated by default</h2>
+          <ul style={{ margin: 0, padding: 0, listStyle: 'none', fontSize: 13, color: 'var(--text-dim)', lineHeight: 2 }}>
+            <li>&gt; each bot runs in its own Docker container, capped on cpu/memory/pids</li>
+            <li>&gt; filesystem access is bind-mounted only to that bot's own folder</li>
+            <li>&gt; file manager and SFTP paths are guarded against traversal</li>
+            <li>&gt; passwords hashed with bcrypt; sessions signed with JWT</li>
+            <li>&gt; a runtime hiccup on one bot never touches another account</li>
+          </ul>
+        </div>
+
+        <div className="card" style={{ borderColor: 'var(--amber-dim)' }}>
+          <div className="eyebrow" style={{ marginBottom: 10 }}>pricing</div>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 34, fontWeight: 700, color: 'var(--amber)' }}>$0</span>
+            <span style={{ fontSize: 13, color: 'var(--text-dim)' }}>/ forever</span>
+          </div>
+          <p style={{ fontSize: 12.5, color: 'var(--text-dim)', margin: '0 0 16px' }}>No card required. No trial clock.</p>
+          <ul style={{ margin: '0 0 20px', padding: 0, listStyle: 'none', fontSize: 13, lineHeight: 2 }}>
+            <li>&gt; 5 bot containers per account</li>
+            <li>&gt; Python 3.12 and Node.js 20 runtimes</li>
+            <li>&gt; in-browser editor + live console</li>
+            <li>&gt; drag-and-drop upload + SFTP access</li>
+          </ul>
+          <Link to="/signup" className="btn btn-primary" style={{ width: '100%' }}>create free account &rarr;</Link>
+        </div>
+      </section>
+
+      <section id="status" className="container" style={{ padding: '0 24px 80px' }}>
+        <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span className="dot" style={{ color: 'var(--ok)' }} />
+            <span style={{ fontSize: 13, fontWeight: 600 }}>All systems operational</span>
+          </div>
+          <span style={{ fontSize: 11.5, color: 'var(--text-faint)' }}>bot.chnexus.net — api, dashboard, sftp</span>
         </div>
       </section>
 
@@ -120,8 +256,46 @@ export default function Landing() {
 
       <style>{`
         @keyframes blink { 50% { opacity: 0; } }
+        .landing-feature-grid {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 12px;
+        }
+        .landing-steps {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 32px;
+        }
+        .landing-nav-drawer { display: none; }
+        @media (max-width: 900px) {
+          .landing-feature-grid { grid-template-columns: repeat(2, 1fr); }
+        }
         @media (max-width: 760px) {
           header.container { grid-template-columns: 1fr !important; }
+          .landing-steps { grid-template-columns: 1fr; gap: 24px; }
+          section.container[style*="grid-template-columns: 1fr 1fr"] { grid-template-columns: 1fr !important; }
+          .landing-spec-row {
+            grid-template-columns: 1fr !important;
+            gap: 4px !important;
+          }
+        }
+        @media (max-width: 640px) {
+          .landing-feature-grid { grid-template-columns: 1fr; }
+          .landing-nav-links, .landing-nav-actions { display: none !important; }
+          .landing-nav-toggle { display: inline-flex !important; }
+          .landing-nav-drawer {
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            padding: 18px 24px 22px;
+            z-index: 20;
+          }
         }
       `}</style>
     </div>

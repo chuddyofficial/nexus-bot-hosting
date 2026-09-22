@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api/client';
+import ConfirmModal from './ui/ConfirmModal';
 
 export default function SftpPanel({ botId, sftpUsername, onCredentialsChanged }) {
   const [creds, setCreds] = useState(null);
@@ -7,13 +8,18 @@ export default function SftpPanel({ botId, sftpUsername, onCredentialsChanged })
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState('');
+  const [confirmRegen, setConfirmRegen] = useState(false);
 
   useEffect(() => {
     api.get(`/bots/${botId}/sftp-info`).then(({ data }) => setInfo(data)).catch(() => {});
   }, [botId]);
 
+  function requestGenerate() {
+    if (sftpUsername) { setConfirmRegen(true); return; }
+    generate();
+  }
+
   async function generate() {
-    if (sftpUsername && !confirm('This will invalidate the current SFTP password. Continue?')) return;
     setLoading(true);
     setError('');
     try {
@@ -24,6 +30,7 @@ export default function SftpPanel({ botId, sftpUsername, onCredentialsChanged })
       setError(err.response?.data?.error || 'Failed to generate SFTP credentials.');
     } finally {
       setLoading(false);
+      setConfirmRegen(false);
     }
   }
 
@@ -74,9 +81,20 @@ export default function SftpPanel({ botId, sftpUsername, onCredentialsChanged })
         </div>
       )}
 
-      <button className="app-btn app-btn-primary app-btn-sm" onClick={generate} disabled={loading}>
+      <button className="app-btn app-btn-primary app-btn-sm" onClick={requestGenerate} disabled={loading}>
         {loading ? 'Generating…' : sftpUsername ? 'Regenerate credentials' : 'Generate SFTP credentials'}
       </button>
+
+      {confirmRegen && (
+        <ConfirmModal
+          title="Regenerate SFTP credentials?"
+          message="This will invalidate the current SFTP password immediately. Any connected client will need the new password."
+          confirmLabel="Regenerate"
+          busy={loading}
+          onConfirm={generate}
+          onCancel={() => setConfirmRegen(false)}
+        />
+      )}
     </div>
   );
 }

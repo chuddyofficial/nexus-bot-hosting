@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api/client';
+import { useToast } from '../context/ToastContext';
 
 const RESTART_POLICIES = [
   { value: 'never', label: 'Never', note: 'Stay stopped if the process exits' },
@@ -13,8 +14,8 @@ export default function StartupConfigPanel({ bot, onUpdated }) {
   const [restartPolicy, setRestartPolicy] = useState(bot.restartPolicy || 'never');
   const [autoStart, setAutoStart] = useState(bot.autoStart || false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     setStartCommand(bot.startCommand || '');
@@ -30,8 +31,7 @@ export default function StartupConfigPanel({ bot, onUpdated }) {
     try {
       await api.put(`/bots/${bot.id}/startup`, { startCommand, preStartHook, restartPolicy, autoStart });
       await onUpdated();
-      setSuccess('Saved — takes effect next start.');
-      setTimeout(() => setSuccess(''), 2000);
+      toast.success('Saved — takes effect next start.');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save.');
     } finally {
@@ -44,7 +44,6 @@ export default function StartupConfigPanel({ bot, onUpdated }) {
   return (
     <div style={{ padding: '24px 28px', maxWidth: 580, overflowY: 'auto' }}>
       {error && <div className="app-alert app-alert-error">{error}</div>}
-      {success && <div className="app-alert app-alert-success">{success}</div>}
 
       <form onSubmit={save} className="app-card">
         <div className="app-eyebrow" style={{ marginBottom: 4 }}>Startup</div>

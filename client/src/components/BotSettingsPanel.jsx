@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../api/client';
+import { useToast } from '../context/ToastContext';
 
 export default function BotSettingsPanel({ bot, onUpdated }) {
   const [name, setName] = useState(bot.name);
@@ -9,8 +10,8 @@ export default function BotSettingsPanel({ bot, onUpdated }) {
     Object.entries(bot.envVars || {}).map(([key, value]) => ({ key, value }))
   );
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [busy, setBusy] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     setName(bot.name);
@@ -20,8 +21,7 @@ export default function BotSettingsPanel({ bot, onUpdated }) {
   }, [bot.id]);
 
   function flash(msg) {
-    setSuccess(msg);
-    setTimeout(() => setSuccess(''), 2000);
+    toast.success(msg);
   }
 
   async function saveName(e) {
@@ -89,7 +89,6 @@ export default function BotSettingsPanel({ bot, onUpdated }) {
   return (
     <div style={{ padding: '24px 28px', maxWidth: 580, overflowY: 'auto' }}>
       {error && <div className="app-alert app-alert-error">{error}</div>}
-      {success && <div className="app-alert app-alert-success">{success}</div>}
 
       <form onSubmit={saveName} className="app-card" style={{ marginBottom: 20 }}>
         <div className="app-eyebrow" style={{ marginBottom: 4 }}>General</div>

@@ -1,11 +1,11 @@
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import AppLogo from './AppLogo';
+import RuntimeTag from './ui/RuntimeTag';
 import { useAuth } from '../context/AuthContext';
 import { useBots } from '../context/BotsContext';
 
-const RUNTIME_TAG = { python: 'PY', node: 'JS' };
-
 const BOT_TABS = [
+  { key: 'overview', label: 'Overview' },
   { key: 'editor', label: 'Editor' },
   { key: 'console', label: 'Console' },
   { key: 'metrics', label: 'Metrics' },
@@ -68,12 +68,7 @@ export default function AppShell({ children }) {
                   >
                     <Icon name="bot" />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{bot.name}</span>
-                    <span style={{
-                      fontSize: 9.5, fontWeight: 800, padding: '1px 5px', borderRadius: 4,
-                      background: 'var(--app-surface-2)', color: 'var(--app-text-faint)', flexShrink: 0
-                    }}>
-                      {RUNTIME_TAG[bot.runtime]}
-                    </span>
+                    <RuntimeTag runtime={bot.runtime} size={18} />
                   </div>
                   {isActiveBot && (
                     <div className="app-nav-sub">
@@ -81,7 +76,7 @@ export default function AppShell({ children }) {
                         <Link
                           key={tab.key}
                           to={`/bots/${bot.id}?tab=${tab.key}`}
-                          className={`app-nav-item ${location.search === `?tab=${tab.key}` || (tab.key === 'editor' && !location.search) ? 'active' : ''}`}
+                          className={`app-nav-item ${location.search === `?tab=${tab.key}` || (tab.key === 'overview' && !location.search) ? 'active' : ''}`}
                         >
                           {tab.label}
                         </Link>

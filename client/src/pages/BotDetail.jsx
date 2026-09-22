@@ -8,8 +8,15 @@ import LiveConsole from '../components/LiveConsole';
 import BotSettingsPanel from '../components/BotSettingsPanel';
 import StartupConfigPanel from '../components/StartupConfigPanel';
 import MetricsPanel from '../components/MetricsPanel';
+import BotOverviewPanel from '../components/BotOverviewPanel';
+import RuntimeTag from '../components/ui/RuntimeTag';
+import StatusBadge from '../components/ui/StatusBadge';
+import ConfirmModal from '../components/ui/ConfirmModal';
+import Modal from '../components/ui/Modal';
+import Skeleton, { SkeletonCard } from '../components/ui/Skeleton';
 import api from '../api/client';
 import { useBots } from '../context/BotsContext';
+import { useToast } from '../context/ToastContext';
 
 // Walks a dropped FileSystemEntry (file or directory) recursively, collecting
 // { file, relativePath } pairs so folder structure survives the upload.
@@ -62,14 +69,13 @@ function langForFile(name = '') {
   return 'plaintext';
 }
 
-const RUNTIME_TAG = { python: 'PY', node: 'JS' };
-
 export default function BotDetail() {
   const { id } = useParams();
   const [searchParams] = useSearchParams();
-  const tab = searchParams.get('tab') || 'editor';
+  const tab = searchParams.get('tab') || 'overview';
   const navigate = useNavigate();
   const { refresh: refreshBotList } = useBots();
+  const toast = useToast();
   const [bot, setBot] = useState(null);
   const [tree, setTree] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
@@ -78,6 +84,11 @@ export default function BotDetail() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [confirmDeleteFile, setConfirmDeleteFile] = useState(null);
+  const [confirmDeleteBot, setConfirmDeleteBot] = useState(false);
+  const [confirmDiscard, setConfirmDiscard] = useState(null);
+  const [newFileModal, setNewFileModal] = useState(false);
+  const [newFileName, setNewFileName] = useState('');
   const fileInputRef = useRef(null);
 
   const loadBot = useCallback(async () => {
@@ -92,17 +103,21 @@ export default function BotDetail() {
 
   useEffect(() => { setBot(null); loadBot(); loadTree(); }, [loadBot, loadTree]);
 
-  async function openFile(node) {
-    if (dirty && !confirm('Discard unsaved changes?')) return;
+  async function doOpenFile(node) {
     try {
       const { data } = await api.get(`/bots/${id}/file`, { params: { path: node.path } });
       setActiveFile(node.path);
       setContent(data.content);
       setDirty(false);
-      navigate(`/bots/${id}`);
+      navigate(`/bots/${id}?tab=editor`);
     } catch (err) {
       setError(err.response?.data?.error || 'Could not open file.');
     }
+  }
+
+  async function openFile(node) {
+    if (dirty) { setConfirmDiscard(node); return; }
+    await doOpenFile(node);
   }
 
   async function saveFile() {
@@ -111,6 +126,7 @@ export default function BotDetail() {
     try {
       await api.put(`/bots/${id}/file`, { path: activeFile, content });
       setDirty(false);
+      toast.success('File saved.');
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to save file.');
     } finally {
@@ -122,16 +138,31 @@ export default function BotDetail() {
     setError('');
     try {
       if (action === 'delete') {
-        if (!confirm(`Delete "${node.name}"?`)) return;
-        await api.delete(`/bots/${id}/file`, { data: { path: node.path } });
-        if (activeFile === node.path) { setActiveFile(null); setContent(''); }
-        await loadTree();
+        setConfirmDeleteFile(node);
       } else if (action === 'extract') {
         await api.post(`/bots/${id}/extract`, { path: node.path });
         await loadTree();
+        toast.success(`Extracted ${node.name}.`);
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Action failed.');
+    }
+  }
+
+  async function confirmDeleteFileNow() {
+    const node = confirmDeleteFile;
+    if (!node) return;
+    setBusy(true);
+    try {
+      await api.delete(`/bots/${id}/file`, { data: { path: node.path } });
+      if (activeFile === node.path) { setActiveFile(null); setContent(''); }
+      await loadTree();
+      toast.success(`Deleted ${node.name}.`);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Action failed.');
+    } finally {
+      setBusy(false);
+      setConfirmDeleteFile(null);
     }
   }
 
@@ -146,6 +177,7 @@ export default function BotDetail() {
     try {
       await api.post(`/bots/${id}/upload`, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
       await loadTree();
+      toast.success(`Uploaded ${entries.length} file${entries.length === 1 ? '' : 's'}.`);
     } catch (err) {
       setError(err.response?.data?.error || 'Upload failed.');
     } finally {
@@ -166,12 +198,20 @@ export default function BotDetail() {
     await uploadEntries(entries);
   }
 
-  async function handleNewFile() {
-    const name = prompt('New file name (e.g. utils.py):');
+  function handleNewFile() {
+    setNewFileName('');
+    setNewFileModal(true);
+  }
+
+  async function submitNewFile(e) {
+    e?.preventDefault();
+    const name = newFileName.trim();
     if (!name) return;
     try {
       await api.post(`/bots/${id}/create`, { path: name, type: 'file' });
       await loadTree();
+      setNewFileModal(false);
+      toast.success(`Created ${name}.`);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create file.');
     }
@@ -183,8 +223,10 @@ export default function BotDetail() {
     try {
       if (bot.status === 'running') {
         await api.post(`/bots/${id}/stop`);
+        toast.success(`${bot.name} stopped.`);
       } else {
         await api.post(`/bots/${id}/start`);
+        toast.success(`${bot.name} started.`);
         navigate(`/bots/${id}?tab=console`);
       }
       await loadBot();
@@ -195,11 +237,18 @@ export default function BotDetail() {
     }
   }
 
-  async function deleteBot() {
-    if (!confirm(`Permanently delete "${bot.name}"? This cannot be undone.`)) return;
-    await api.delete(`/bots/${id}`);
-    await refreshBotList();
-    navigate('/dashboard');
+  async function confirmDeleteBotNow() {
+    setBusy(true);
+    try {
+      await api.delete(`/bots/${id}`);
+      await refreshBotList();
+      toast.success(`${bot.name} deleted.`);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to delete bot.');
+      setBusy(false);
+      setConfirmDeleteBot(false);
+    }
   }
 
   async function setAsEntry() {
@@ -215,7 +264,10 @@ export default function BotDetail() {
   if (!bot) {
     return (
       <AppShell>
-        <div style={{ padding: 40, color: 'var(--app-text-dim)' }}>Loading…</div>
+        <div style={{ padding: '24px 28px', maxWidth: 720 }}>
+          <Skeleton width={180} height={20} style={{ marginBottom: 20 }} />
+          <SkeletonCard />
+        </div>
       </AppShell>
     );
   }
@@ -225,31 +277,26 @@ export default function BotDetail() {
       <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
         <div style={{ borderBottom: '1px solid var(--app-border)', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 30, height: 30, borderRadius: 8, fontSize: 10, fontWeight: 800,
-              background: 'var(--app-surface-2)', color: 'var(--app-text-dim)'
-            }}>
-              {RUNTIME_TAG[bot.runtime]}
-            </span>
+            <RuntimeTag runtime={bot.runtime} size={30} />
             <h2 style={{ fontSize: 17 }}>{bot.name}</h2>
-            <span className={`app-badge app-badge-${bot.status}`}><span className="app-dot" />{bot.status}</span>
+            <StatusBadge status={bot.status} />
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className={`app-btn app-btn-sm ${bot.status === 'running' ? 'app-btn-danger' : 'app-btn-primary'}`} onClick={toggleRunning} disabled={busy}>
               {bot.status === 'running' ? 'Stop' : 'Start'}
             </button>
-            <button className="app-btn app-btn-danger app-btn-sm" onClick={deleteBot}>Delete</button>
+            <button className="app-btn app-btn-danger app-btn-sm" onClick={() => setConfirmDeleteBot(true)}>Delete</button>
           </div>
         </div>
 
         {error && <div className="app-alert app-alert-error" style={{ margin: '12px 24px 0' }}>{error}</div>}
 
-        <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+        <div className="app-bot-body" style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           {tab === 'editor' && (
             <div
+              className="app-bot-filetree"
               style={{
-                width: 260, borderRight: '1px solid var(--app-border)', display: 'flex', flexDirection: 'column',
+                width: 260, flexShrink: 0, borderRight: '1px solid var(--app-border)', display: 'flex', flexDirection: 'column',
                 position: 'relative', background: dragActive ? 'var(--app-accent-glow)' : 'transparent',
                 transition: 'background 0.1s ease'
               }}
@@ -283,8 +330,10 @@ export default function BotDetail() {
             </div>
           )}
 
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-            {tab === 'console' ? (
+          <div className="app-bot-editor-area" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            {tab === 'overview' ? (
+              <BotOverviewPanel bot={bot} botId={id} />
+            ) : tab === 'console' ? (
               <LiveConsole botId={id} active={tab === 'console'} />
             ) : tab === 'metrics' ? (
               <MetricsPanel botId={id} running={bot.status === 'running'} />
@@ -319,6 +368,60 @@ export default function BotDetail() {
           </div>
         </div>
       </div>
+
+      {confirmDeleteFile && (
+        <ConfirmModal
+          title={`Delete "${confirmDeleteFile.name}"?`}
+          message={confirmDeleteFile.type === 'dir'
+            ? 'This will permanently delete the folder and everything inside it.'
+            : 'This will permanently delete the file.'}
+          confirmLabel="Delete"
+          busy={busy}
+          onConfirm={confirmDeleteFileNow}
+          onCancel={() => setConfirmDeleteFile(null)}
+        />
+      )}
+
+      {confirmDeleteBot && (
+        <ConfirmModal
+          title={`Delete "${bot.name}"?`}
+          message="This permanently deletes the bot, its container, and all its files. This cannot be undone."
+          confirmLabel="Delete bot"
+          busy={busy}
+          onConfirm={confirmDeleteBotNow}
+          onCancel={() => setConfirmDeleteBot(false)}
+        />
+      )}
+
+      {confirmDiscard && (
+        <ConfirmModal
+          title="Discard unsaved changes?"
+          message={`"${activeFile}" has unsaved edits that will be lost.`}
+          confirmLabel="Discard"
+          onConfirm={async () => { const node = confirmDiscard; setConfirmDiscard(null); await doOpenFile(node); }}
+          onCancel={() => setConfirmDiscard(null)}
+        />
+      )}
+
+      {newFileModal && (
+        <Modal onClose={() => setNewFileModal(false)} maxWidth={380}>
+          <form onSubmit={submitNewFile}>
+            <h2 style={{ fontSize: 16, marginBottom: 16 }}>New file</h2>
+            <div className="app-field">
+              <label className="app-field-label">File name</label>
+              <input
+                className="app-input" autoFocus value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                placeholder="utils.py"
+              />
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 6 }}>
+              <button type="button" className="app-btn app-btn-ghost" onClick={() => setNewFileModal(false)}>Cancel</button>
+              <button type="submit" className="app-btn app-btn-primary" disabled={!newFileName.trim()}>Create</button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </AppShell>
   );
 }
