@@ -2,9 +2,9 @@
 
 Free public bot hosting for Python and Node.js bots. Users sign up, create up to 5 bots,
 upload their code (drag-and-drop files/folders, .zip uploads with in-browser extraction,
-or SFTP via WinSCP/FileZilla/etc.), edit files with a full Monaco (VS Code) editor, and
-start/stop their bot — each running in its own isolated Docker container with its own
-SQLite database.
+or SFTP via WinSCP/FileZilla/etc.), edit files with a full Monaco (VS Code) editor, watch
+a live streaming console, tune startup behavior and resource limits, and start/stop their
+bot — each running in its own isolated Docker container with its own SQLite database.
 
 ## Structure
 
@@ -75,6 +75,34 @@ users' files. The SFTP server is embedded directly in the Node app (via `ssh2`, 
 service to configure) and listens on port 2222. Passwords are shown once at generation time
 and stored only as a bcrypt hash — regenerate from the dashboard if lost.
 
+## Per-bot dashboard tabs
+
+Each bot's detail page has six tabs:
+
+- **editor** — Monaco file tree/editor, drag-and-drop upload, zip extract
+- **console** — live streaming logs over WebSocket (`/ws/console`), not polling; auto-scrolls,
+  shows connection state, reconnects per-visit
+- **metrics** — live CPU %, memory, and uptime while the bot is running, sparkline charts
+  polled every 2s from `docker stats`
+- **startup** — custom start command (overrides the default `python <entry>` / `node <entry>`),
+  an optional pre-start hook (e.g. `pip install -r requirements.txt`, runs once before the
+  main process and aborts the start on failure), restart policy (never / on-crash / always,
+  mapped to Docker's own `RestartPolicy`), and an auto-start-on-server-boot toggle
+- **settings** — rename, per-bot CPU/memory limit overrides (capped by `BOT_MAX_CPU_LIMIT` /
+  `BOT_MAX_MEMORY_LIMIT_MB`), and environment variables injected into the container at start
+- **sftp** — generate/rotate this bot's SFTP credentials
+
+Restart counts are tracked automatically via a Docker event-stream listener
+(`server/src/services/containerEvents.js`), which also keeps bot status in sync when a
+container dies or restarts outside of a direct API call (a crash, an OOM kill, Docker's own
+restart policy firing).
+
+## Account settings
+
+`/account` lets a signed-in user change their display name/username, request an email change
+(sends a confirmation link to the new address before it takes effect), change their password,
+and permanently delete their account (cascades to all owned bots and containers).
+
 ## Admin panel
 
 `server/src/scripts/seedAdmin.js <email> <password> [username]` creates or promotes an
@@ -93,4 +121,16 @@ bot across the platform.
 - Certain executable extensions (`.exe`, `.dll`, `.bat`, `.cmd`, `.ps1`, `.msi`, `.sys`, `.scr`)
   are blocked from upload/creation, since bots only need interpretable source + data files.
 - Passwords (account and SFTP) are hashed with bcrypt; JWTs are used for session auth.
-- Disabled accounts are rejected at login and on every subsequent authenticated request.
+- Disabled accounts are rejected at login and on every subsequent authenticated request
+  (and their running bots are force-stopped the moment an admin disables the account).
+- Every Docker call on a delete/stop path is caught individually so a container-runtime
+  hiccup degrades that one request instead of crashing the whole process for every user;
+  top-level `unhandledRejection`/`uncaughtException` handlers are a last-resort backstop.
+
+## New environment variables (this round)
+
+```
+SFTP_PORT=2222                # already documented above
+BOT_MAX_CPU_LIMIT=2           # ceiling a user can set via the settings tab
+BOT_MAX_MEMORY_LIMIT_MB=1024  # ceiling a user can set via the settings tab
+```

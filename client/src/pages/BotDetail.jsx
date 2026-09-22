@@ -4,6 +4,10 @@ import Editor from '@monaco-editor/react';
 import AppNav from '../components/AppNav';
 import FileTree from '../components/FileTree';
 import SftpPanel from '../components/SftpPanel';
+import LiveConsole from '../components/LiveConsole';
+import BotSettingsPanel from '../components/BotSettingsPanel';
+import StartupConfigPanel from '../components/StartupConfigPanel';
+import MetricsPanel from '../components/MetricsPanel';
 import api from '../api/client';
 
 // Walks a dropped FileSystemEntry (file or directory) recursively, collecting
@@ -58,6 +62,15 @@ function langForFile(name = '') {
   return 'plaintext';
 }
 
+const TABS = [
+  { key: 'editor', label: 'editor' },
+  { key: 'console', label: 'console' },
+  { key: 'metrics', label: 'metrics' },
+  { key: 'startup', label: 'startup' },
+  { key: 'settings', label: 'settings' },
+  { key: 'sftp', label: 'sftp' }
+];
+
 export default function BotDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -66,7 +79,6 @@ export default function BotDetail() {
   const [activeFile, setActiveFile] = useState(null);
   const [content, setContent] = useState('');
   const [dirty, setDirty] = useState(false);
-  const [logs, setLogs] = useState('');
   const [tab, setTab] = useState('editor');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -84,14 +96,6 @@ export default function BotDetail() {
   }, [id]);
 
   useEffect(() => { loadBot(); loadTree(); }, [loadBot, loadTree]);
-
-  useEffect(() => {
-    if (tab !== 'console' || !bot) return;
-    const load = () => api.get(`/bots/${id}/logs`).then(({ data }) => setLogs(data.logs));
-    load();
-    const interval = setInterval(load, 3000);
-    return () => clearInterval(interval);
-  }, [tab, bot, id]);
 
   async function openFile(node) {
     if (dirty && !confirm('Discard unsaved changes?')) return;
@@ -230,14 +234,23 @@ export default function BotDetail() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className={`btn btn-sm ${tab === 'editor' ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setTab('editor')}>editor</button>
-          <button className={`btn btn-sm ${tab === 'console' ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setTab('console')}>console</button>
-          <button className={`btn btn-sm ${tab === 'sftp' ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setTab('sftp')}>sftp</button>
           <button className={`btn btn-sm ${bot.status === 'running' ? 'btn-danger' : 'btn-primary'}`} onClick={toggleRunning} disabled={busy}>
             {bot.status === 'running' ? 'stop' : 'start'}
           </button>
           <button className="btn btn-danger btn-sm" onClick={deleteBot}>delete</button>
         </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 4, padding: '8px 24px', borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            className={`btn btn-sm ${tab === t.key ? 'btn-secondary' : 'btn-ghost'}`}
+            onClick={() => setTab(t.key)}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
       {error && <div className="alert alert-error" style={{ margin: '12px 24px 0' }}>{error}</div>}
@@ -280,9 +293,13 @@ export default function BotDetail() {
 
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
           {tab === 'console' ? (
-            <div style={{ flex: 1, background: '#000', color: 'var(--amber)', fontFamily: 'var(--mono)', fontSize: 12.5, padding: 16, overflowY: 'auto', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
-              {logs || '# no output yet — start the bot to stream logs here'}
-            </div>
+            <LiveConsole botId={id} active={tab === 'console'} />
+          ) : tab === 'metrics' ? (
+            <MetricsPanel botId={id} running={bot.status === 'running'} />
+          ) : tab === 'startup' ? (
+            <StartupConfigPanel bot={bot} onUpdated={loadBot} />
+          ) : tab === 'settings' ? (
+            <BotSettingsPanel bot={bot} onUpdated={loadBot} />
           ) : tab === 'sftp' ? (
             <SftpPanel botId={id} sftpUsername={bot.sftpUsername} onCredentialsChanged={loadBot} />
           ) : activeFile ? (

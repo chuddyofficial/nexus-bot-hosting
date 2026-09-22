@@ -80,6 +80,28 @@ function deleteUser(id) {
   db.prepare('DELETE FROM users WHERE id = ?').run(id);
 }
 
+function updateProfile(id, { displayName, username }) {
+  db.prepare('UPDATE users SET display_name = ?, username = ? WHERE id = ?')
+    .run(displayName, username || null, id);
+}
+
+function setPendingEmail(id, pendingEmail, token) {
+  db.prepare('UPDATE users SET pending_email = ?, pending_email_token = ? WHERE id = ?')
+    .run(pendingEmail, token, id);
+}
+
+function getUserByPendingEmailToken(token) {
+  return db.prepare('SELECT * FROM users WHERE pending_email_token = ?').get(token);
+}
+
+function confirmPendingEmail(id) {
+  const user = getUserById(id);
+  if (!user || !user.pending_email) return null;
+  db.prepare('UPDATE users SET email = ?, pending_email = NULL, pending_email_token = NULL, email_verified = 1 WHERE id = ?')
+    .run(user.pending_email, id);
+  return getUserById(id);
+}
+
 function toPublic(user) {
   if (!user) return null;
   return {
@@ -91,6 +113,7 @@ function toPublic(user) {
     isAdmin: !!user.is_admin,
     disabled: !!user.disabled,
     botLimitOverride: user.bot_limit_override,
+    pendingEmail: user.pending_email,
     createdAt: user.created_at
   };
 }
@@ -110,6 +133,10 @@ module.exports = {
   listAll,
   setDisabled,
   setBotLimitOverride,
+  updateProfile,
+  setPendingEmail,
+  getUserByPendingEmailToken,
+  confirmPendingEmail,
   deleteUser,
   toPublic
 };

@@ -179,6 +179,8 @@ if "!JWT_SECRET_GEN!"=="" (
   echo DOCKER_SOCKET=//./pipe/docker_engine
   echo BOT_CPU_LIMIT=0.5
   echo BOT_MEMORY_LIMIT_MB=256
+  echo BOT_MAX_CPU_LIMIT=2
+  echo BOT_MAX_MEMORY_LIMIT_MB=1024
   echo.
   echo SFTP_PORT=2222
 ) > "%ROOT_DIR%\server\.env"

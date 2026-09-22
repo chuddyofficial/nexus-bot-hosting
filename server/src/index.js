@@ -1,7 +1,19 @@
 require('dotenv').config();
 
+// A single request's failure must never take down the whole process - every
+// other user's connections would drop with it. Log loudly and keep running;
+// the failing request itself still gets a proper error response from Express's
+// own error handler when the rejection originated inside a route.
+process.on('unhandledRejection', (err) => {
+  console.error('[unhandled rejection]', err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[uncaught exception]', err);
+});
+
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -12,6 +24,9 @@ const botRoutes = require('./routes/bots');
 const fileRoutes = require('./routes/files');
 const adminRoutes = require('./routes/admin');
 const { startSftpServer } = require('./sftp/sftpServer');
+const { attachConsoleSocket } = require('./ws/consoleSocket');
+const { runAutoStart } = require('./services/autoStart');
+const { watchContainerEvents } = require('./services/containerEvents');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -60,8 +75,13 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
+const httpServer = http.createServer(app);
+attachConsoleSocket(httpServer);
+
+httpServer.listen(PORT, () => {
   console.log(`Nexus Bot Hosting API listening on port ${PORT}`);
 });
 
 startSftpServer();
+watchContainerEvents();
+runAutoStart().catch((err) => console.error('[auto-start] unexpected error:', err));

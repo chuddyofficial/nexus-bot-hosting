@@ -1,9 +1,12 @@
 const express = require('express');
+const fs = require('fs');
 const { randomBytes } = require('crypto');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
+const Bot = require('../models/Bot');
 const { signToken } = require('../services/authService');
 const emailService = require('../services/emailService');
+const dockerService = require('../docker/dockerService');
 const requireAuth = require('../middleware/requireAuth');
 
 const router = express.Router();
@@ -107,6 +110,97 @@ router.post('/reset-password', authLimiter, (req, res) => {
   if (!user) return res.status(400).json({ error: 'Invalid or expired reset link.' });
 
   User.updatePassword(user.id, password);
+  res.json({ ok: true });
+});
+
+// --- Account settings (self-service) ---
+
+router.put('/account/profile', requireAuth, (req, res) => {
+  const { displayName, username } = req.body || {};
+  if (!displayName || displayName.trim().length < 2) {
+    return res.status(400).json({ error: 'Display name must be at least 2 characters.' });
+  }
+  if (username && !USERNAME_RE.test(username)) {
+    return res.status(400).json({ error: 'Username must be 3-32 characters (letters, numbers, ._-).' });
+  }
+  if (username) {
+    const existing = User.getUserByUsername(username);
+    if (existing && existing.id !== req.user.id) {
+      return res.status(409).json({ error: 'That username is already taken.' });
+    }
+  }
+
+  User.updateProfile(req.user.id, { displayName: displayName.trim(), username: username || null });
+  res.json({ user: User.toPublic(User.getUserById(req.user.id)) });
+});
+
+router.put('/account/password', requireAuth, authLimiter, (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!currentPassword || !newPassword || newPassword.length < 8) {
+    return res.status(400).json({ error: 'Current password and a new 8+ character password are required.' });
+  }
+  if (!User.verifyPassword(req.user, currentPassword)) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+
+  User.updatePassword(req.user.id, newPassword);
+  res.json({ ok: true });
+});
+
+router.post('/account/change-email', requireAuth, authLimiter, async (req, res) => {
+  const { newEmail, currentPassword } = req.body || {};
+  if (!newEmail || !EMAIL_RE.test(newEmail)) {
+    return res.status(400).json({ error: 'A valid new email address is required.' });
+  }
+  if (!currentPassword || !User.verifyPassword(req.user, currentPassword)) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+  if (User.getUserByEmail(newEmail)) {
+    return res.status(409).json({ error: 'That email is already in use.' });
+  }
+
+  const token = randomBytes(32).toString('hex');
+  User.setPendingEmail(req.user.id, newEmail.toLowerCase().trim(), token);
+
+  const clientOrigin = process.env.CLIENT_ORIGIN || 'https://bot.chnexus.net';
+  const confirmUrl = `${clientOrigin}/confirm-email-change?token=${token}`;
+  emailService.sendEmailChangeConfirmation({ ...req.user, email: newEmail }, confirmUrl)
+    .catch((e) => console.error('email error', e));
+
+  res.json({ ok: true, message: `A confirmation link was sent to ${newEmail}.` });
+});
+
+router.post('/account/confirm-email-change', (req, res) => {
+  const { token } = req.body || {};
+  if (!token) return res.status(400).json({ error: 'Missing token.' });
+
+  const user = User.getUserByPendingEmailToken(token);
+  if (!user) return res.status(400).json({ error: 'Invalid or expired confirmation link.' });
+
+  const updated = User.confirmPendingEmail(user.id);
+  res.json({ ok: true, user: User.toPublic(updated) });
+});
+
+router.delete('/account', requireAuth, async (req, res) => {
+  const { currentPassword } = req.body || {};
+  if (!currentPassword || !User.verifyPassword(req.user, currentPassword)) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+  if (req.user.is_admin) {
+    return res.status(400).json({ error: 'Admin accounts cannot be self-deleted. Ask another admin to remove your access first.' });
+  }
+
+  const bots = Bot.listByUser(req.user.id);
+  for (const bot of bots) {
+    try {
+      await dockerService.removeContainerIfExists(bot.container_name);
+    } catch (err) {
+      console.error(`Failed to remove container for bot ${bot.id}:`, err.message);
+    }
+    fs.rmSync(bot.folder_path, { recursive: true, force: true });
+  }
+
+  User.deleteUser(req.user.id);
   res.json({ ok: true });
 });
 

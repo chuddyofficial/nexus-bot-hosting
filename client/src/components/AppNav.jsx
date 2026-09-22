@@ -14,6 +14,7 @@ export default function AppNav() {
           {user?.isAdmin && (
             <Link to="/admin" className="btn btn-ghost btn-sm">admin</Link>
           )}
+          <Link to="/account" className="btn btn-ghost btn-sm">account</Link>
           <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>{user?.email}</span>
           <button className="btn btn-ghost btn-sm" onClick={() => { logout(); navigate('/login'); }}>
             log out

@@ -56,6 +56,48 @@ function updateEntryFile(id, entryFile) {
   db.prepare('UPDATE bots SET entry_file = ?, updated_at = ? WHERE id = ?').run(entryFile, Date.now(), id);
 }
 
+function updateSettings(id, { name }) {
+  db.prepare('UPDATE bots SET name = ?, updated_at = ? WHERE id = ?').run(name, Date.now(), id);
+}
+
+function updateStartupConfig(id, { startCommand, preStartHook, restartPolicy, autoStart }) {
+  db.prepare(`
+    UPDATE bots SET start_command = ?, pre_start_hook = ?, restart_policy = ?, auto_start = ?, updated_at = ?
+    WHERE id = ?
+  `).run(startCommand || null, preStartHook || null, restartPolicy, autoStart ? 1 : 0, Date.now(), id);
+}
+
+function updateResourceLimits(id, { cpuLimit, memoryLimitMb }) {
+  db.prepare('UPDATE bots SET cpu_limit = ?, memory_limit_mb = ?, updated_at = ? WHERE id = ?')
+    .run(cpuLimit, memoryLimitMb, Date.now(), id);
+}
+
+function updateEnvVars(id, envVarsObj) {
+  db.prepare('UPDATE bots SET env_vars = ?, updated_at = ? WHERE id = ?')
+    .run(JSON.stringify(envVarsObj || {}), Date.now(), id);
+}
+
+function getEnvVars(bot) {
+  if (!bot.env_vars) return {};
+  try {
+    return JSON.parse(bot.env_vars);
+  } catch {
+    return {};
+  }
+}
+
+function incrementRestartCount(id) {
+  db.prepare('UPDATE bots SET restart_count = restart_count + 1, updated_at = ? WHERE id = ?').run(Date.now(), id);
+}
+
+function markStarted(id) {
+  db.prepare('UPDATE bots SET last_started_at = ?, updated_at = ? WHERE id = ?').run(Date.now(), Date.now(), id);
+}
+
+function listAutoStart() {
+  return db.prepare('SELECT * FROM bots WHERE auto_start = 1').all();
+}
+
 function deleteBot(id) {
   db.prepare('DELETE FROM bots WHERE id = ?').run(id);
 }
@@ -88,6 +130,15 @@ function toPublic(bot) {
     status: bot.status,
     entryFile: bot.entry_file,
     sftpUsername: bot.sftp_username,
+    startCommand: bot.start_command,
+    preStartHook: bot.pre_start_hook,
+    restartPolicy: bot.restart_policy,
+    autoStart: !!bot.auto_start,
+    cpuLimit: bot.cpu_limit,
+    memoryLimitMb: bot.memory_limit_mb,
+    envVars: getEnvVars(bot),
+    restartCount: bot.restart_count,
+    lastStartedAt: bot.last_started_at,
     createdAt: bot.created_at,
     updatedAt: bot.updated_at
   };
@@ -114,6 +165,14 @@ module.exports = {
   limitForUser,
   updateStatus,
   updateEntryFile,
+  updateSettings,
+  updateStartupConfig,
+  updateResourceLimits,
+  updateEnvVars,
+  getEnvVars,
+  incrementRestartCount,
+  markStarted,
+  listAutoStart,
   deleteBot,
   regenerateSftpCredentials,
   getBySftpUsername,

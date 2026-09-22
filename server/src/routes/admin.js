@@ -5,6 +5,7 @@ const Bot = require('../models/Bot');
 const requireAuth = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
 const dockerService = require('../docker/dockerService');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 router.use(requireAuth, requireAdmin);
@@ -19,12 +20,26 @@ router.get('/users', (req, res) => {
   res.json({ users });
 });
 
-router.post('/users/:id/disable', (req, res) => {
+router.post('/users/:id/disable', async (req, res) => {
   const target = User.getUserById(req.params.id);
   if (!target) return res.status(404).json({ error: 'User not found.' });
   if (target.id === req.user.id) return res.status(400).json({ error: 'You cannot disable your own account.' });
 
   User.setDisabled(target.id, true);
+
+  const bots = Bot.listByUser(target.id);
+  for (const bot of bots) {
+    if (bot.status === 'running') {
+      try {
+        await dockerService.stopBotContainer(bot.container_name);
+      } catch (err) {
+        console.error(`Failed to stop container for bot ${bot.id}:`, err.message);
+      }
+      Bot.updateStatus(bot.id, 'stopped');
+    }
+  }
+
+  emailService.sendAccountDisabledEmail(User.toPublic(target)).catch((e) => console.error('email error', e));
   res.json({ ok: true });
 });
 
@@ -57,7 +72,11 @@ router.delete('/users/:id', async (req, res) => {
 
   const bots = Bot.listByUser(target.id);
   for (const bot of bots) {
-    await dockerService.removeContainerIfExists(bot.container_name);
+    try {
+      await dockerService.removeContainerIfExists(bot.container_name);
+    } catch (err) {
+      console.error(`Failed to remove container for bot ${bot.id}:`, err.message);
+    }
     fs.rmSync(bot.folder_path, { recursive: true, force: true });
   }
 
@@ -76,7 +95,11 @@ router.post('/bots/:id/stop', async (req, res) => {
   const bot = Bot.getById(req.params.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
 
-  await dockerService.stopBotContainer(bot.container_name);
+  try {
+    await dockerService.stopBotContainer(bot.container_name);
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to stop bot. ' + err.message });
+  }
   Bot.updateStatus(bot.id, 'stopped');
   res.json({ ok: true });
 });
@@ -85,7 +108,11 @@ router.delete('/bots/:id', async (req, res) => {
   const bot = Bot.getById(req.params.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
 
-  await dockerService.removeContainerIfExists(bot.container_name);
+  try {
+    await dockerService.removeContainerIfExists(bot.container_name);
+  } catch (err) {
+    console.error(`Failed to remove container for bot ${bot.id}:`, err.message);
+  }
   fs.rmSync(bot.folder_path, { recursive: true, force: true });
   Bot.deleteBot(bot.id);
 

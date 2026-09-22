@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin INTEGER NOT NULL DEFAULT 0,
   disabled INTEGER NOT NULL DEFAULT 0,
   bot_limit_override INTEGER,
+  pending_email TEXT,
+  pending_email_token TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -40,6 +42,15 @@ CREATE TABLE IF NOT EXISTS bots (
   entry_file TEXT,
   sftp_username TEXT,
   sftp_password_hash TEXT,
+  start_command TEXT,
+  pre_start_hook TEXT,
+  restart_policy TEXT NOT NULL DEFAULT 'never',
+  auto_start INTEGER NOT NULL DEFAULT 0,
+  cpu_limit REAL,
+  memory_limit_mb INTEGER,
+  env_vars TEXT,
+  restart_count INTEGER NOT NULL DEFAULT 0,
+  last_started_at INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -58,8 +69,19 @@ ensureColumn('users', 'username', 'username TEXT');
 ensureColumn('users', 'is_admin', 'is_admin INTEGER NOT NULL DEFAULT 0');
 ensureColumn('users', 'disabled', 'disabled INTEGER NOT NULL DEFAULT 0');
 ensureColumn('users', 'bot_limit_override', 'bot_limit_override INTEGER');
+ensureColumn('users', 'pending_email', 'pending_email TEXT');
+ensureColumn('users', 'pending_email_token', 'pending_email_token TEXT');
 ensureColumn('bots', 'sftp_username', 'sftp_username TEXT');
 ensureColumn('bots', 'sftp_password_hash', 'sftp_password_hash TEXT');
+ensureColumn('bots', 'start_command', 'start_command TEXT');
+ensureColumn('bots', 'pre_start_hook', 'pre_start_hook TEXT');
+ensureColumn('bots', 'restart_policy', "restart_policy TEXT NOT NULL DEFAULT 'never'");
+ensureColumn('bots', 'auto_start', 'auto_start INTEGER NOT NULL DEFAULT 0');
+ensureColumn('bots', 'cpu_limit', 'cpu_limit REAL');
+ensureColumn('bots', 'memory_limit_mb', 'memory_limit_mb INTEGER');
+ensureColumn('bots', 'env_vars', 'env_vars TEXT');
+ensureColumn('bots', 'restart_count', 'restart_count INTEGER NOT NULL DEFAULT 0');
+ensureColumn('bots', 'last_started_at', 'last_started_at INTEGER');
 
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL;`);
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_bots_sftp_username ON bots(sftp_username) WHERE sftp_username IS NOT NULL;`);

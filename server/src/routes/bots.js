@@ -70,7 +70,11 @@ router.delete('/:id', async (req, res) => {
   const bot = Bot.getByIdForUser(req.params.id, req.user.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
 
-  await dockerService.removeContainerIfExists(bot.container_name);
+  try {
+    await dockerService.removeContainerIfExists(bot.container_name);
+  } catch (err) {
+    console.error(`Failed to remove container for bot ${bot.id}:`, err.message);
+  }
   fs.rmSync(bot.folder_path, { recursive: true, force: true });
   Bot.deleteBot(bot.id);
 
@@ -80,18 +84,20 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/start', async (req, res) => {
   const bot = Bot.getByIdForUser(req.params.id, req.user.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
-  if (!bot.entry_file || !fs.existsSync(path.join(bot.folder_path, bot.entry_file))) {
+  if (!bot.start_command && (!bot.entry_file || !fs.existsSync(path.join(bot.folder_path, bot.entry_file)))) {
     return res.status(400).json({ error: `Entry file "${bot.entry_file}" not found. Upload your bot files first.` });
   }
 
   try {
-    const containerId = await dockerService.startBotContainer({ bot, hostFolderPath: bot.folder_path });
+    const envVars = Bot.getEnvVars(bot);
+    const { containerId, hookOutput } = await dockerService.startBotContainer({ bot, hostFolderPath: bot.folder_path, envVars });
     Bot.updateStatus(bot.id, 'running', containerId);
-    res.json({ bot: Bot.toPublic(Bot.getById(bot.id)) });
+    Bot.markStarted(bot.id);
+    res.json({ bot: Bot.toPublic(Bot.getById(bot.id)), hookOutput });
   } catch (err) {
     console.error('start error', err);
     Bot.updateStatus(bot.id, 'error');
-    res.status(500).json({ error: 'Failed to start bot. ' + err.message });
+    res.status(500).json({ error: 'Failed to start bot. ' + err.message, hookOutput: err.hookOutput });
   }
 });
 
@@ -99,7 +105,11 @@ router.post('/:id/stop', async (req, res) => {
   const bot = Bot.getByIdForUser(req.params.id, req.user.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
 
-  await dockerService.stopBotContainer(bot.container_name);
+  try {
+    await dockerService.stopBotContainer(bot.container_name);
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to stop bot. ' + err.message });
+  }
   Bot.updateStatus(bot.id, 'stopped');
   res.json({ bot: Bot.toPublic(Bot.getById(bot.id)) });
 });
@@ -108,17 +118,25 @@ router.get('/:id/status', async (req, res) => {
   const bot = Bot.getByIdForUser(req.params.id, req.user.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
 
-  const liveStatus = await dockerService.getContainerStatus(bot.container_name);
-  if (liveStatus !== bot.status) Bot.updateStatus(bot.id, liveStatus);
-  res.json({ status: liveStatus });
+  try {
+    const liveStatus = await dockerService.getContainerStatus(bot.container_name);
+    if (liveStatus !== bot.status) Bot.updateStatus(bot.id, liveStatus);
+    res.json({ status: liveStatus });
+  } catch (err) {
+    res.status(503).json({ error: 'Could not reach the container runtime.' });
+  }
 });
 
 router.get('/:id/logs', async (req, res) => {
   const bot = Bot.getByIdForUser(req.params.id, req.user.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
 
-  const logs = await dockerService.getLogs(bot.container_name, 500);
-  res.json({ logs });
+  try {
+    const logs = await dockerService.getLogs(bot.container_name, 500);
+    res.json({ logs });
+  } catch (err) {
+    res.status(503).json({ error: 'Could not reach the container runtime.' });
+  }
 });
 
 router.put('/:id/entry-file', (req, res) => {
@@ -148,6 +166,123 @@ router.post('/:id/sftp-credentials', (req, res) => {
   const host = process.env.PUBLIC_DOMAIN || 'bot.chnexus.net';
 
   res.json({ sftpUsername, sftpPassword, host, port });
+});
+
+// --- Settings tab: rename ---
+router.put('/:id/settings', (req, res) => {
+  const bot = Bot.getByIdForUser(req.params.id, req.user.id);
+  if (!bot) return res.status(404).json({ error: 'Bot not found.' });
+
+  const { name } = req.body || {};
+  if (!name || !NAME_RE.test(name)) {
+    return res.status(400).json({ error: 'Bot name must be 2-32 characters (letters, numbers, spaces, - or _).' });
+  }
+
+  Bot.updateSettings(bot.id, { name });
+  res.json({ bot: Bot.toPublic(Bot.getById(bot.id)) });
+});
+
+// --- Startup/process config tab ---
+const RESTART_POLICIES = ['never', 'on-crash', 'always'];
+
+router.put('/:id/startup', (req, res) => {
+  const bot = Bot.getByIdForUser(req.params.id, req.user.id);
+  if (!bot) return res.status(404).json({ error: 'Bot not found.' });
+
+  const { startCommand, preStartHook, restartPolicy, autoStart } = req.body || {};
+  if (restartPolicy && !RESTART_POLICIES.includes(restartPolicy)) {
+    return res.status(400).json({ error: `Restart policy must be one of: ${RESTART_POLICIES.join(', ')}.` });
+  }
+  if (startCommand && startCommand.length > 500) {
+    return res.status(400).json({ error: 'Start command is too long (max 500 characters).' });
+  }
+  if (preStartHook && preStartHook.length > 2000) {
+    return res.status(400).json({ error: 'Pre-start hook is too long (max 2000 characters).' });
+  }
+
+  Bot.updateStartupConfig(bot.id, {
+    startCommand: startCommand || null,
+    preStartHook: preStartHook || null,
+    restartPolicy: restartPolicy || bot.restart_policy || 'never',
+    autoStart: !!autoStart
+  });
+  res.json({ bot: Bot.toPublic(Bot.getById(bot.id)) });
+});
+
+// --- Resource limits (bot settings tab) ---
+router.put('/:id/resources', (req, res) => {
+  const bot = Bot.getByIdForUser(req.params.id, req.user.id);
+  if (!bot) return res.status(404).json({ error: 'Bot not found.' });
+
+  const { cpuLimit, memoryLimitMb } = req.body || {};
+  const cpu = cpuLimit === '' || cpuLimit == null ? null : Number(cpuLimit);
+  const mem = memoryLimitMb === '' || memoryLimitMb == null ? null : parseInt(memoryLimitMb, 10);
+
+  if (cpu !== null && (!Number.isFinite(cpu) || cpu <= 0 || cpu > dockerService.MAX_CPU_LIMIT)) {
+    return res.status(400).json({ error: `CPU limit must be between 0 and ${dockerService.MAX_CPU_LIMIT} cores.` });
+  }
+  if (mem !== null && (!Number.isInteger(mem) || mem <= 0 || mem > dockerService.MAX_MEMORY_LIMIT_MB)) {
+    return res.status(400).json({ error: `Memory limit must be between 0 and ${dockerService.MAX_MEMORY_LIMIT_MB} MB.` });
+  }
+
+  Bot.updateResourceLimits(bot.id, { cpuLimit: cpu, memoryLimitMb: mem });
+  res.json({
+    bot: Bot.toPublic(Bot.getById(bot.id)),
+    defaults: { cpuLimit: dockerService.DEFAULT_CPU_LIMIT, memoryLimitMb: dockerService.DEFAULT_MEMORY_LIMIT_MB },
+    max: { cpuLimit: dockerService.MAX_CPU_LIMIT, memoryLimitMb: dockerService.MAX_MEMORY_LIMIT_MB }
+  });
+});
+
+// --- Environment variables ---
+router.put('/:id/env', (req, res) => {
+  const bot = Bot.getByIdForUser(req.params.id, req.user.id);
+  if (!bot) return res.status(404).json({ error: 'Bot not found.' });
+
+  const { envVars } = req.body || {};
+  if (typeof envVars !== 'object' || envVars === null || Array.isArray(envVars)) {
+    return res.status(400).json({ error: 'envVars must be an object of key/value pairs.' });
+  }
+  const entries = Object.entries(envVars);
+  if (entries.length > 50) {
+    return res.status(400).json({ error: 'Maximum 50 environment variables.' });
+  }
+  for (const [key, value] of entries) {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      return res.status(400).json({ error: `Invalid variable name "${key}". Use letters, numbers, underscores; can't start with a number.` });
+    }
+    if (String(value).length > 4000) {
+      return res.status(400).json({ error: `Value for "${key}" is too long (max 4000 characters).` });
+    }
+  }
+
+  Bot.updateEnvVars(bot.id, envVars);
+  res.json({ bot: Bot.toPublic(Bot.getById(bot.id)) });
+});
+
+// --- Live resource metrics (per-bot) ---
+router.get('/:id/stats', async (req, res) => {
+  const bot = Bot.getByIdForUser(req.params.id, req.user.id);
+  if (!bot) return res.status(404).json({ error: 'Bot not found.' });
+
+  if (bot.status !== 'running') {
+    return res.json({ running: false });
+  }
+
+  const stats = await dockerService.getStats(bot.container_name);
+  if (!stats) return res.json({ running: false });
+
+  const info = await dockerService.getContainerInfo(bot.container_name);
+  const startedAt = info?.State?.StartedAt ? new Date(info.State.StartedAt).getTime() : bot.last_started_at;
+  const uptimeSeconds = startedAt ? Math.max(0, Math.floor((Date.now() - startedAt) / 1000)) : 0;
+
+  res.json({
+    running: true,
+    cpuPercent: stats.cpuPercent,
+    memoryUsedMb: stats.memoryUsedMb,
+    memoryLimitMb: stats.memoryLimitMb,
+    uptimeSeconds,
+    restartCount: bot.restart_count
+  });
 });
 
 module.exports = router;

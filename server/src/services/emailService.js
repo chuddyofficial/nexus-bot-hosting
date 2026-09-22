@@ -85,15 +85,39 @@ async function sendBotCreatedEmail(user, bot) {
   return send({ to: user.email, subject: `Your bot "${bot.name}" is ready`, html });
 }
 
+async function sendEmailChangeConfirmation(user, confirmUrl) {
+  const html = shell('Confirm your new email address', `
+    <p>Hey ${escapeHtml(user.displayName)},</p>
+    <p>Confirm that <strong>${escapeHtml(user.email)}</strong> should become the email address
+    for your Nexus Bot Hosting account:</p>
+    <p style="text-align:center;margin:28px 0;">
+      <a href="${confirmUrl}" style="background:#ffb000;color:#191305;text-decoration:none;padding:12px 28px;border-radius:3px;font-weight:700;display:inline-block;">Confirm Email Change</a>
+    </p>
+    <p style="font-size:13px;color:#5B6178;">If you didn't request this, you can safely ignore this email — your account email will not change.</p>
+  `);
+  return send({ to: user.email, subject: 'Confirm your new Nexus Bot Hosting email', html });
+}
+
 function escapeHtml(str) {
   return String(str).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
   }[c]));
 }
 
+async function sendAccountDisabledEmail(user) {
+  const html = shell('Your account has been disabled', `
+    <p>Hey ${escapeHtml(user.displayName)},</p>
+    <p>Your Nexus Bot Hosting account has been disabled by an administrator. All of your
+    bots have been stopped. If you believe this is a mistake, reply to this email.</p>
+  `);
+  return send({ to: user.email, subject: 'Your Nexus Bot Hosting account has been disabled', html });
+}
+
 module.exports = {
   send,
   sendWelcomeEmail,
   sendPasswordResetEmail,
-  sendBotCreatedEmail
+  sendBotCreatedEmail,
+  sendEmailChangeConfirmation,
+  sendAccountDisabledEmail
 };
