@@ -287,7 +287,13 @@ for /f "tokens=*" %%n in ('where node') do set "NODE_EXE=%%n"
 "%NSSM_EXE%" set NexusBotHostingWeb AppStderr "!CADDY_DIR!\caddy.log"
 "%NSSM_EXE%" set NexusBotHostingWeb AppRotateFiles 1
 "%NSSM_EXE%" set NexusBotHostingWeb Start SERVICE_AUTO_START
-"%NSSM_EXE%" set NexusBotHostingWeb DependOnService NexusBotHosting
+
+:: Not using NSSM's DependOnService here: Windows SCM can leave a stale
+:: dependency reference after a rapid remove/reinstall cycle (seen in testing
+:: as WIN32_EXIT_CODE 1068, "dependency service does not exist"), even though
+:: the target service is actually running. A short delay before starting
+:: Caddy is simpler and avoids that class of failure.
+timeout /t 3 /nobreak >nul
 "%NSSM_EXE%" start NexusBotHostingWeb
 
 timeout /t 2 /nobreak >nul
