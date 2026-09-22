@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS bots (
   container_name TEXT NOT NULL,
   folder_path TEXT NOT NULL,
   entry_file TEXT,
+  sftp_username TEXT,
+  sftp_password_hash TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -56,7 +58,10 @@ ensureColumn('users', 'username', 'username TEXT');
 ensureColumn('users', 'is_admin', 'is_admin INTEGER NOT NULL DEFAULT 0');
 ensureColumn('users', 'disabled', 'disabled INTEGER NOT NULL DEFAULT 0');
 ensureColumn('users', 'bot_limit_override', 'bot_limit_override INTEGER');
+ensureColumn('bots', 'sftp_username', 'sftp_username TEXT');
+ensureColumn('bots', 'sftp_password_hash', 'sftp_password_hash TEXT');
 
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL;`);
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_bots_sftp_username ON bots(sftp_username) WHERE sftp_username IS NOT NULL;`);
 
 module.exports = db;

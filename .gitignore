@@ -2,7 +2,10 @@ node_modules/
 dist/
 server/data/*.sqlite
 server/data/*.sqlite-*
+server/data/sftp_host_key
 server/.env
+server/boot_pid.txt
+server/test_*.js
 bots/*
 !bots/.gitkeep
 *.log

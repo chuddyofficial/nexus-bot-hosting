@@ -137,4 +137,17 @@ router.put('/:id/entry-file', (req, res) => {
   res.json({ bot: Bot.toPublic(Bot.getById(bot.id)) });
 });
 
+// Generates (or rotates) this bot's SFTP credentials. The plaintext password is
+// only ever returned in this response - only a bcrypt hash is stored.
+router.post('/:id/sftp-credentials', (req, res) => {
+  const bot = Bot.getByIdForUser(req.params.id, req.user.id);
+  if (!bot) return res.status(404).json({ error: 'Bot not found.' });
+
+  const { sftpUsername, sftpPassword } = Bot.regenerateSftpCredentials(bot.id);
+  const port = process.env.SFTP_PORT || '2222';
+  const host = process.env.PUBLIC_DOMAIN || 'bot.chnexus.net';
+
+  res.json({ sftpUsername, sftpPassword, host, port });
+});
+
 module.exports = router;

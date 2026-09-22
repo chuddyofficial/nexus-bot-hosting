@@ -3,7 +3,50 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import AppNav from '../components/AppNav';
 import FileTree from '../components/FileTree';
+import SftpPanel from '../components/SftpPanel';
 import api from '../api/client';
+
+// Walks a dropped FileSystemEntry (file or directory) recursively, collecting
+// { file, relativePath } pairs so folder structure survives the upload.
+function readEntry(entry, basePath = '') {
+  return new Promise((resolve) => {
+    if (entry.isFile) {
+      entry.file((file) => resolve([{ file, relativePath: basePath + entry.name }]));
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const all = [];
+      const readBatch = () => {
+        reader.readEntries(async (entries) => {
+          if (entries.length === 0) {
+            const results = await Promise.all(all);
+            resolve(results.flat());
+            return;
+          }
+          for (const child of entries) {
+            all.push(readEntry(child, basePath + entry.name + '/'));
+          }
+          readBatch();
+        });
+      };
+      readBatch();
+    } else {
+      resolve([]);
+    }
+  });
+}
+
+async function collectDroppedFiles(dataTransfer) {
+  const items = Array.from(dataTransfer.items || []);
+  const entries = items.map((item) => item.webkitGetAsEntry?.()).filter(Boolean);
+
+  if (entries.length === 0) {
+    // Fallback for browsers without webkitGetAsEntry: flat file list, no folder support.
+    return Array.from(dataTransfer.files || []).map((file) => ({ file, relativePath: file.name }));
+  }
+
+  const results = await Promise.all(entries.map((entry) => readEntry(entry)));
+  return results.flat();
+}
 
 function langForFile(name = '') {
   if (name.endsWith('.py')) return 'python';
@@ -27,6 +70,7 @@ export default function BotDetail() {
   const [tab, setTab] = useState('editor');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const fileInputRef = useRef(null);
 
   const loadBot = useCallback(async () => {
@@ -92,12 +136,12 @@ export default function BotDetail() {
     }
   }
 
-  async function handleUpload(e) {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
+  async function uploadEntries(entries) {
+    if (entries.length === 0) return;
     const formData = new FormData();
-    files.forEach((f) => formData.append('files', f));
+    entries.forEach(({ file }) => formData.append('files', file));
     formData.append('path', '');
+    formData.append('relativePaths', JSON.stringify(entries.map((e) => e.relativePath)));
     setBusy(true);
     setError('');
     try {
@@ -107,8 +151,20 @@ export default function BotDetail() {
       setError(err.response?.data?.error || 'Upload failed.');
     } finally {
       setBusy(false);
-      e.target.value = '';
     }
+  }
+
+  async function handleUpload(e) {
+    const files = Array.from(e.target.files || []);
+    await uploadEntries(files.map((file) => ({ file, relativePath: file.webkitRelativePath || file.name })));
+    e.target.value = '';
+  }
+
+  async function handleDrop(e) {
+    e.preventDefault();
+    setDragActive(false);
+    const entries = await collectDroppedFiles(e.dataTransfer);
+    await uploadEntries(entries);
   }
 
   async function handleNewFile() {
@@ -174,9 +230,9 @@ export default function BotDetail() {
           </span>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-secondary btn-sm" onClick={() => setTab(tab === 'console' ? 'editor' : 'console')}>
-            {tab === 'console' ? 'editor' : 'console'}
-          </button>
+          <button className={`btn btn-sm ${tab === 'editor' ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setTab('editor')}>editor</button>
+          <button className={`btn btn-sm ${tab === 'console' ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setTab('console')}>console</button>
+          <button className={`btn btn-sm ${tab === 'sftp' ? 'btn-secondary' : 'btn-ghost'}`} onClick={() => setTab('sftp')}>sftp</button>
           <button className={`btn btn-sm ${bot.status === 'running' ? 'btn-danger' : 'btn-primary'}`} onClick={toggleRunning} disabled={busy}>
             {bot.status === 'running' ? 'stop' : 'start'}
           </button>
@@ -187,7 +243,25 @@ export default function BotDetail() {
       {error && <div className="alert alert-error" style={{ margin: '12px 24px 0' }}>{error}</div>}
 
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <div style={{ width: 260, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column' }}>
+        <div
+          style={{
+            width: 260, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column',
+            position: 'relative', background: dragActive ? 'var(--amber-glow)' : 'transparent',
+            transition: 'background 0.1s ease'
+          }}
+          onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+          onDragLeave={(e) => { if (e.currentTarget === e.target) setDragActive(false); }}
+          onDrop={handleDrop}
+        >
+          {dragActive && (
+            <div style={{
+              position: 'absolute', inset: 0, zIndex: 5, pointerEvents: 'none',
+              border: '2px dashed var(--amber)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: 'rgba(255,176,0,0.06)', fontSize: 13, color: 'var(--amber)', fontWeight: 600, textAlign: 'center', padding: 16
+            }}>
+              drop files or folders<br />to upload
+            </div>
+          )}
           <div style={{ padding: 12, display: 'flex', gap: 8, borderBottom: '1px solid var(--border)' }}>
             <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={() => fileInputRef.current.click()}>upload</button>
             <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={handleNewFile}>+ file</button>
@@ -204,11 +278,13 @@ export default function BotDetail() {
           </div>
         </div>
 
-        <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
           {tab === 'console' ? (
             <div style={{ flex: 1, background: '#000', color: 'var(--amber)', fontFamily: 'var(--mono)', fontSize: 12.5, padding: 16, overflowY: 'auto', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
               {logs || '# no output yet — start the bot to stream logs here'}
             </div>
+          ) : tab === 'sftp' ? (
+            <SftpPanel botId={id} sftpUsername={bot.sftpUsername} onCredentialsChanged={loadBot} />
           ) : activeFile ? (
             <>
               <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -1,7 +1,9 @@
-const { randomUUID } = require('crypto');
+const { randomUUID, randomBytes } = require('crypto');
+const bcrypt = require('bcryptjs');
 const db = require('../db');
 
 const MAX_BOTS_PER_USER = parseInt(process.env.MAX_BOTS_PER_USER || '5', 10);
+const SALT_ROUNDS = 12;
 
 function countByUser(userId) {
   return db.prepare('SELECT COUNT(*) AS c FROM bots WHERE user_id = ?').get(userId).c;
@@ -58,6 +60,25 @@ function deleteBot(id) {
   db.prepare('DELETE FROM bots WHERE id = ?').run(id);
 }
 
+/** Generates fresh SFTP credentials for a bot, storing only a bcrypt hash of the password. */
+function regenerateSftpCredentials(id) {
+  const sftpUsername = `bot_${id.split('-')[0]}`;
+  const sftpPassword = randomBytes(18).toString('base64url');
+  const hash = bcrypt.hashSync(sftpPassword, SALT_ROUNDS);
+  db.prepare('UPDATE bots SET sftp_username = ?, sftp_password_hash = ?, updated_at = ? WHERE id = ?')
+    .run(sftpUsername, hash, Date.now(), id);
+  return { sftpUsername, sftpPassword };
+}
+
+function getBySftpUsername(sftpUsername) {
+  return db.prepare('SELECT * FROM bots WHERE sftp_username = ?').get(sftpUsername);
+}
+
+function verifySftpPassword(bot, password) {
+  if (!bot.sftp_password_hash) return false;
+  return bcrypt.compareSync(password, bot.sftp_password_hash);
+}
+
 function toPublic(bot) {
   if (!bot) return null;
   return {
@@ -66,6 +87,7 @@ function toPublic(bot) {
     runtime: bot.runtime,
     status: bot.status,
     entryFile: bot.entry_file,
+    sftpUsername: bot.sftp_username,
     createdAt: bot.created_at,
     updatedAt: bot.updated_at
   };
@@ -93,6 +115,9 @@ module.exports = {
   updateStatus,
   updateEntryFile,
   deleteBot,
+  regenerateSftpCredentials,
+  getBySftpUsername,
+  verifySftpPassword,
   toPublic,
   toAdminPublic
 };

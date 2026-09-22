@@ -1,9 +1,10 @@
 # Nexus Bot Hosting
 
 Free public bot hosting for Python and Node.js bots. Users sign up, create up to 5 bots,
-upload their code (including .zip uploads with in-browser extraction), edit files with a
-full Monaco (VS Code) editor, and start/stop their bot — each running in its own isolated
-Docker container with its own SQLite database.
+upload their code (drag-and-drop files/folders, .zip uploads with in-browser extraction,
+or SFTP via WinSCP/FileZilla/etc.), edit files with a full Monaco (VS Code) editor, and
+start/stop their bot — each running in its own isolated Docker container with its own
+SQLite database.
 
 ## Structure
 
@@ -65,12 +66,31 @@ unencrypted. This is the simplest working setup and fine for most cases. To upgr
 end-to-end HTTPS later, install a free [Cloudflare Origin Certificate](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/)
 on the VPS, point Caddy at it, and switch Cloudflare to "Full (strict)".
 
+## SFTP access
+
+Each bot can generate its own SFTP credentials (dashboard → bot → SFTP tab) for use with
+WinSCP, FileZilla, or any SFTP client. Credentials are per-bot (not per-user) and chrooted:
+connecting only exposes that bot's own folder, with no visibility into other bots or other
+users' files. The SFTP server is embedded directly in the Node app (via `ssh2`, no OS-level
+service to configure) and listens on port 2222. Passwords are shown once at generation time
+and stored only as a bcrypt hash — regenerate from the dashboard if lost.
+
+## Admin panel
+
+`server/src/scripts/seedAdmin.js <email> <password> [username]` creates or promotes an
+admin account directly against the database (bypasses the public signup form, which has
+no way to grant admin). Admins get an `/admin` link in the nav leading to a platform-wide
+panel: view all users with bot counts, disable/enable accounts, override a user's bot
+limit, delete users (cascades to their bots and containers), and force-stop or delete any
+bot across the platform.
+
 ## Security notes
 
 - Each bot runs in its own Docker container (CPU/memory/PID limited, isolated filesystem
   bind-mounted only to that bot's own folder).
-- File manager operations are guarded against path traversal (`server/src/services/pathSafety.js`)
-  and zip-slip during extraction.
+- File manager and SFTP operations are guarded against path traversal
+  (`server/src/services/pathSafety.js`) and zip-slip during extraction.
 - Certain executable extensions (`.exe`, `.dll`, `.bat`, `.cmd`, `.ps1`, `.msi`, `.sys`, `.scr`)
   are blocked from upload/creation, since bots only need interpretable source + data files.
-- Passwords are hashed with bcrypt; JWTs are used for session auth.
+- Passwords (account and SFTP) are hashed with bcrypt; JWTs are used for session auth.
+- Disabled accounts are rejected at login and on every subsequent authenticated request.

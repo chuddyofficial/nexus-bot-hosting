@@ -11,6 +11,7 @@ const authRoutes = require('./routes/auth');
 const botRoutes = require('./routes/bots');
 const fileRoutes = require('./routes/files');
 const adminRoutes = require('./routes/admin');
+const { startSftpServer } = require('./sftp/sftpServer');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -62,3 +63,5 @@ const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
   console.log(`Nexus Bot Hosting API listening on port ${PORT}`);
 });
+
+startSftpServer();

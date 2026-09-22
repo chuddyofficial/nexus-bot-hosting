@@ -179,6 +179,8 @@ if "!JWT_SECRET_GEN!"=="" (
   echo DOCKER_SOCKET=//./pipe/docker_engine
   echo BOT_CPU_LIMIT=0.5
   echo BOT_MEMORY_LIMIT_MB=256
+  echo.
+  echo SFTP_PORT=2222
 ) > "%ROOT_DIR%\server\.env"
 
 echo   Configuration written to server\.env
@@ -204,6 +206,15 @@ if %errorlevel% neq 0 (
 ) else (
     netsh advfirewall firewall set rule name="Nexus Bot Hosting Web" new protocol=TCP localport=80,443
     echo   Firewall rule updated for TCP ports 80,443.
+)
+
+netsh advfirewall firewall show rule name="Nexus Bot Hosting SFTP" >nul 2>&1
+if %errorlevel% neq 0 (
+    netsh advfirewall firewall add rule name="Nexus Bot Hosting SFTP" dir=in action=allow protocol=TCP localport=2222
+    echo   Firewall rule added for TCP port 2222 ^(per-bot SFTP access^).
+) else (
+    netsh advfirewall firewall set rule name="Nexus Bot Hosting SFTP" new protocol=TCP localport=2222
+    echo   Firewall rule updated for TCP port 2222.
 )
 
 :: ---------------------------------------------------------------
@@ -324,9 +335,11 @@ echo.
 echo    Local app URL:  http://localhost:%APP_PORT%
 echo    Local web URL:  http://localhost  (Caddy, plain HTTP)
 echo    Public URL:     https://%DOMAIN%
+echo    SFTP:           port 2222 (per-bot credentials, generated in each
+echo                     bot's dashboard - works with WinSCP, FileZilla, etc.)
 echo.
 echo    Services:
-echo      NexusBotHosting     (the Node app, port %APP_PORT%)
+echo      NexusBotHosting     (the Node app, port %APP_PORT% + SFTP on 2222)
 echo      NexusBotHostingWeb  (Caddy reverse proxy, port 80)
 echo      - Restart:  nssm restart NexusBotHosting ^&^& nssm restart NexusBotHostingWeb
 echo      - Logs:     server\data\service.log  /  installer\caddy\caddy.log

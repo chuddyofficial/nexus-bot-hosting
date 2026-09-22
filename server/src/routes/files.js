@@ -7,7 +7,7 @@ const yauzl = require('yauzl');
 const archiver = require('archiver');
 const Bot = require('../models/Bot');
 const requireAuth = require('../middleware/requireAuth');
-const { safeJoin, safeFilename } = require('../services/pathSafety');
+const { safeJoin } = require('../services/pathSafety');
 
 const router = express.Router();
 router.use(requireAuth);
@@ -15,7 +15,7 @@ router.use(requireAuth);
 const MAX_UPLOAD_MB = parseInt(process.env.MAX_UPLOAD_SIZE_MB || '200', 10);
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 }
+  limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024, files: 500 }
 });
 
 // Extensions we will never allow to be written/uploaded (execution risk beyond the sandbox scope).
@@ -160,22 +160,43 @@ router.delete('/:id/file', express.json(), async (req, res) => {
 });
 
 // --- Upload one or more files (including .zip) into a target directory ---
-router.post('/:id/upload', upload.array('files', 50), async (req, res) => {
+// Supports drag-and-drop folder uploads: pass a JSON array in req.body.relativePaths
+// (same order as the files field) to preserve subfolder structure; otherwise files
+// are flattened into the target directory using their bare filename.
+router.post('/:id/upload', upload.array('files', 500), async (req, res) => {
   const bot = getBotOr404(req, res);
   if (!bot) return;
 
   try {
-    const targetDir = safeJoin(bot.folder_path, req.body.path || '');
-    await fsp.mkdir(targetDir, { recursive: true });
+    const basePath = req.body.path || '';
+    let relativePaths = null;
+    if (req.body.relativePaths) {
+      try {
+        relativePaths = JSON.parse(req.body.relativePaths);
+      } catch {
+        return res.status(400).json({ error: 'Invalid relativePaths.' });
+      }
+    }
 
     const saved = [];
-    for (const file of req.files || []) {
-      const filename = safeFilename(file.originalname);
+    for (let i = 0; i < (req.files || []).length; i++) {
+      const file = req.files[i];
+      const relPath = relativePaths && relativePaths[i] ? relativePaths[i] : file.originalname;
+      const cleanRel = String(relPath).replace(/\\/g, '/').replace(/^\/+/, '');
+      const filename = path.basename(cleanRel);
+      const subDir = path.dirname(cleanRel);
+
       const ext = path.extname(filename).toLowerCase();
       if (ext !== '.zip') assertAllowedFile(filename);
+
+      const targetDir = subDir && subDir !== '.'
+        ? safeJoin(bot.folder_path, path.join(basePath, subDir))
+        : safeJoin(bot.folder_path, basePath);
+      await fsp.mkdir(targetDir, { recursive: true });
+
       const dest = path.join(targetDir, filename);
       await fsp.writeFile(dest, file.buffer);
-      saved.push(filename);
+      saved.push(cleanRel);
     }
     res.json({ ok: true, saved });
   } catch (err) {
