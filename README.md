@@ -13,8 +13,14 @@ model" below for what that does and doesn't guarantee.
 - `client/` — React (Vite) frontend
 - `bots/` — per-user bot folders created at runtime (gitignored)
 - `installer/install.bat` — one-shot Windows VPS installer/service setup
+- `installer/linux/install-node.sh` — optional Linux bot node (bot files + Docker + SFTP)
 
 ## Bot isolation model
+
+**Recommended: run bots on a Linux bot node** (see "Running bots on a separate Linux machine"
+below). With `BOT_NODE_URL` set, bots run in real per-bot Docker containers on a Linux machine -
+full filesystem isolation and kernel-enforced CPU/memory limits - while this Windows VPS keeps
+hosting the website. Everything below describes the fallback used when no bot node is configured.
 
 Bots originally ran in per-bot Docker containers. This VPS's host doesn't support nested
 virtualization, which both WSL2 and Hyper-V require, so Docker Desktop can't run here at
@@ -112,6 +118,51 @@ Caddy on port 80 — visitors always see a padlock, but the Cloudflare-to-origin
 unencrypted. This is the simplest working setup and fine for most cases. To upgrade to
 end-to-end HTTPS later, install a free [Cloudflare Origin Certificate](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/)
 on the VPS, point Caddy at it, and switch Cloudflare to "Full (strict)".
+
+## Running bots on a separate Linux machine (bot node)
+
+The website (panel: UI, accounts, database, emails) can stay on the Windows VPS while the
+bots themselves — their files, their Docker containers, and SFTP — live on a Linux machine.
+This avoids running Docker Desktop on Windows Server.
+
+```
+ users ──HTTPS──> Cloudflare ──> Windows: Caddy + panel ──HTTPS (pinned cert + token)──> Linux bot node
+ users ──SFTP (port 2222)──────────────────────────────────────────────────────────────> Linux bot node
+```
+
+**On the Linux machine** (Ubuntu/Debian/RHEL-family):
+
+```bash
+git clone https://github.com/chuddyofficial/nexus-bot-hosting.git
+cd nexus-bot-hosting
+sudo PANEL_IP=<windows-vps-public-ip> bash installer/linux/install-node.sh
+```
+
+It installs Docker + Node 20, runs `server/src/botnode/agent.js` as the `nexus-node`
+systemd service, opens ports 8443 (only from `PANEL_IP`, if given) and 2222, and prints
+`BOT_NODE_URL`, `BOT_NODE_TOKEN`, `BOT_NODE_CA` and `SFTP_HOST` (also saved to
+`/etc/nexus-node/panel-settings.txt`).
+
+**On the Windows panel:** paste those lines into `server\.env` and restart the
+`NexusBotHosting` service (or re-run `install.bat` and choose the remote-node option).
+
+What the node does (`server/src/botnode/`):
+- `agent.js` — HTTPS server. `/agent/*` handles bot folder create/delete and the whole file
+  manager (same code as local mode, `services/fileRoutes.js`); every other path is a
+  **filtered** pass-through to the local Docker socket (`dockerGuard.js`): only `nexus-bot-*`
+  containers, only the two runtime images, and container specs that bind-mount nothing but
+  that bot's own folder, with no privileged flags/devices/extra mounts. Raw Docker access is
+  root-equivalent, so this keeps a leaked token from becoming full control of the Linux box.
+- Runs the SFTP server next to the files. The panel pushes SFTP logins (username + bcrypt
+  hash) to the node on change and every 5 minutes.
+- Auth is a 64-hex-char bearer token; TLS uses a self-signed cert generated at install that
+  the panel pins via `BOT_NODE_CA`.
+
+Existing bots: their files stay on Windows under `bots\`. To move them, copy
+`bots\<userId>\<botId>` to `/var/lib/nexus/bots/<userId>/<botId>` on the node.
+
+Updating the node: `git pull && sudo bash installer/linux/install-node.sh` (keeps the token
+and cert, so the panel's settings stay valid).
 
 ## SFTP access
 

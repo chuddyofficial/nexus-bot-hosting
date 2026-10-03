@@ -116,6 +116,13 @@ function getBySftpUsername(sftpUsername) {
   return db.prepare('SELECT * FROM bots WHERE sftp_username = ?').get(sftpUsername);
 }
 
+function listSftpLogins() {
+  return db.prepare(`
+    SELECT id, user_id, sftp_username, sftp_password_hash FROM bots
+    WHERE sftp_username IS NOT NULL AND sftp_password_hash IS NOT NULL
+  `).all();
+}
+
 function verifySftpPassword(bot, password) {
   if (!bot.sftp_password_hash) return false;
   return bcrypt.compareSync(password, bot.sftp_password_hash);
@@ -176,6 +183,7 @@ module.exports = {
   deleteBot,
   regenerateSftpCredentials,
   getBySftpUsername,
+  listSftpLogins,
   verifySftpPassword,
   toPublic,
   toAdminPublic

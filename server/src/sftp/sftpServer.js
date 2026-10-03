@@ -1,7 +1,6 @@
 const fs = require('fs');
 const path = require('path');
 const { Server, utils: sshUtils } = require('ssh2');
-const Bot = require('../models/Bot');
 const { safeJoin } = require('../services/pathSafety');
 
 const SFTP_PORT = parseInt(process.env.SFTP_PORT || '2222', 10);
@@ -9,6 +8,7 @@ const DATA_DIR = path.resolve(__dirname, '..', '..', process.env.DATA_DIR || 'da
 const HOST_KEY_PATH = path.join(DATA_DIR, 'sftp_host_key');
 
 function ensureHostKey() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(HOST_KEY_PATH)) {
     const { generateKeyPairSync } = require('crypto');
     const { privateKey } = generateKeyPairSync('rsa', {
@@ -232,26 +232,32 @@ function attachSftpSubsystem(connection, botRoot) {
   });
 }
 
-function startSftpServer() {
+/**
+ * Starts the per-bot SFTP server. authenticate(username, password) returns (or
+ * resolves to) the absolute folder that login is chrooted to, or null to reject.
+ */
+function startSftpServer({ authenticate }) {
   const hostKey = ensureHostKey();
 
   const server = new Server({ hostKeys: [hostKey] }, (client) => {
-    let authenticatedBot = null;
+    let botRoot = null;
 
     client.on('authentication', (ctx) => {
       if (ctx.method !== 'password') return ctx.reject(['password']);
 
-      const bot = Bot.getBySftpUsername(ctx.username);
-      if (!bot || !Bot.verifySftpPassword(bot, ctx.password)) {
-        return ctx.reject(['password']);
-      }
-      authenticatedBot = bot;
-      ctx.accept();
+      Promise.resolve()
+        .then(() => authenticate(ctx.username, ctx.password))
+        .then((root) => {
+          if (!root) return ctx.reject(['password']);
+          botRoot = path.resolve(root);
+          ctx.accept();
+        })
+        .catch(() => ctx.reject(['password']));
     });
 
     client.on('ready', () => {
-      if (!authenticatedBot) return client.end();
-      attachSftpSubsystem(client, path.resolve(authenticatedBot.folder_path));
+      if (!botRoot) return client.end();
+      attachSftpSubsystem(client, botRoot);
     });
 
     client.on('error', () => { /* connection-level errors are non-fatal */ });

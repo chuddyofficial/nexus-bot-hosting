@@ -54,6 +54,34 @@ if "%APP_PORT%"=="" set "APP_PORT=%DEFAULT_PORT%"
 echo.
 set /p "RESEND_KEY=  Paste your Resend API key (or leave blank to add later): "
 
+:: ---------------------------------------------------------------
+:: Where bots run: this machine, or a remote Linux bot node
+:: ---------------------------------------------------------------
+echo.
+echo   Where should bots run?
+echo     - Leave blank to run them on THIS machine ^(needs Docker Desktop^).
+echo     - Or, if you've run installer/linux/install-node.sh on a Linux
+echo       machine, paste the values it printed ^(just the part after "="^)
+echo       to keep bot files, Docker and SFTP on that Linux machine.
+set "BOT_NODE_URL="
+set "BOT_NODE_TOKEN="
+set "BOT_NODE_CA="
+set /p "BOT_NODE_URL=  BOT_NODE_URL [blank = this machine]: "
+if "!BOT_NODE_URL!"=="" goto :sftp_local
+
+set /p "BOT_NODE_TOKEN=  BOT_NODE_TOKEN: "
+set /p "BOT_NODE_CA=  BOT_NODE_CA: "
+if "!BOT_NODE_TOKEN!"=="" (
+    echo   ERROR: BOT_NODE_TOKEN is required when using a bot node.
+    pause
+    exit /b 1
+)
+for /f "delims=" %%a in ('powershell -NoProfile -Command "try { ([Uri]'!BOT_NODE_URL!').Host } catch { '' }"') do set "DETECTED_IP=%%a"
+set /p "SFTP_HOST_VAL=  SFTP host users connect to (the Linux node) [!DETECTED_IP!]: "
+if "!SFTP_HOST_VAL!"=="" set "SFTP_HOST_VAL=!DETECTED_IP!"
+goto :sftp_done
+
+:sftp_local
 echo.
 echo   Detecting this machine's public IP for SFTP connections...
 for /f "delims=" %%a in ('powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; try { (Invoke-WebRequest -UseBasicParsing -Uri 'https://ifconfig.me' -TimeoutSec 5).Content.Trim() } catch { '' }"') do set "DETECTED_IP=%%a"
@@ -63,6 +91,7 @@ if "!DETECTED_IP!"=="" (
     set /p "SFTP_HOST_VAL=  SFTP host for WinSCP/etc. [!DETECTED_IP!]: "
     if "!SFTP_HOST_VAL!"=="" set "SFTP_HOST_VAL=!DETECTED_IP!"
 )
+:sftp_done
 
 echo.
 echo   Using domain:     %DOMAIN%
@@ -109,6 +138,10 @@ if %errorlevel% neq 0 (
 :: ---------------------------------------------------------------
 echo.
 echo   [2/8] Checking Python...
+if not "!BOT_NODE_URL!"=="" (
+    echo   Skipped - bots run in Docker on the Linux bot node ^(!BOT_NODE_URL!^).
+    goto :docker_done
+)
 where python >nul 2>&1
 if %errorlevel% neq 0 (
     echo   WARNING: "python" was not found on PATH. Python bots will fail to
@@ -120,6 +153,7 @@ if %errorlevel% neq 0 (
     echo   Python found:
     python --version
 )
+:docker_done
 
 :: ---------------------------------------------------------------
 :: Install dependencies
@@ -181,6 +215,10 @@ if "!JWT_SECRET_GEN!"=="" (
   echo.
   echo MAX_BOTS_PER_USER=5
   echo MAX_UPLOAD_SIZE_MB=200
+  echo.
+  echo BOT_NODE_URL=!BOT_NODE_URL!
+  echo BOT_NODE_TOKEN=!BOT_NODE_TOKEN!
+  echo BOT_NODE_CA=!BOT_NODE_CA!
   echo.
   echo BOT_CPU_LIMIT=0.5
   echo BOT_MEMORY_LIMIT_MB=256

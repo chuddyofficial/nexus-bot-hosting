@@ -1,12 +1,12 @@
 const express = require('express');
-const fs = require('fs');
 const { randomBytes } = require('crypto');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const Bot = require('../models/Bot');
 const { signToken } = require('../services/authService');
 const emailService = require('../services/emailService');
-const dockerService = require('../process/processService');
+const dockerService = require('../services/botRuntime');
+const storage = require('../services/botStorage');
 const requireAuth = require('../middleware/requireAuth');
 
 const router = express.Router();
@@ -197,7 +197,7 @@ router.delete('/account', requireAuth, async (req, res) => {
     } catch (err) {
       console.error(`Failed to remove container for bot ${bot.id}:`, err.message);
     }
-    fs.rmSync(bot.folder_path, { recursive: true, force: true });
+    await storage.deleteBotFolder(bot);
   }
 
   User.deleteUser(req.user.id);

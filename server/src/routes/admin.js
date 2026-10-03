@@ -1,10 +1,10 @@
 const express = require('express');
-const fs = require('fs');
 const User = require('../models/User');
 const Bot = require('../models/Bot');
 const requireAuth = require('../middleware/requireAuth');
 const requireAdmin = require('../middleware/requireAdmin');
-const dockerService = require('../process/processService');
+const dockerService = require('../services/botRuntime');
+const storage = require('../services/botStorage');
 const emailService = require('../services/emailService');
 
 const router = express.Router();
@@ -103,7 +103,7 @@ router.delete('/users/:id', async (req, res) => {
     } catch (err) {
       console.error(`Failed to remove container for bot ${bot.id}:`, err.message);
     }
-    fs.rmSync(bot.folder_path, { recursive: true, force: true });
+    await storage.deleteBotFolder(bot);
   }
 
   User.deleteUser(target.id);
@@ -139,7 +139,7 @@ router.delete('/bots/:id', async (req, res) => {
   } catch (err) {
     console.error(`Failed to remove container for bot ${bot.id}:`, err.message);
   }
-  fs.rmSync(bot.folder_path, { recursive: true, force: true });
+  await storage.deleteBotFolder(bot);
   Bot.deleteBot(bot.id);
 
   res.json({ ok: true });

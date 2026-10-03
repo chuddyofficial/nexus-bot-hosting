@@ -1,22 +1,14 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const Bot = require('../models/Bot');
 const requireAuth = require('../middleware/requireAuth');
-const dockerService = require('../process/processService');
+const dockerService = require('../services/botRuntime');
 const emailService = require('../services/emailService');
+const storage = require('../services/botStorage');
 
 const router = express.Router();
 router.use(requireAuth);
 
-const BOTS_DIR = path.resolve(__dirname, '..', '..', process.env.BOTS_DIR || '../bots');
-if (!fs.existsSync(BOTS_DIR)) fs.mkdirSync(BOTS_DIR, { recursive: true });
-
 const NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9 _-]{1,31}$/;
-
-function botFolderPath(userId, botId) {
-  return path.join(BOTS_DIR, userId, botId);
-}
 
 router.get('/', (req, res) => {
   const bots = Bot.listByUser(req.user.id).map(Bot.toPublic);
@@ -39,19 +31,24 @@ router.post('/', async (req, res) => {
 
   const { randomUUID } = require('crypto');
   const id = randomUUID();
-  const folderPath = botFolderPath(req.user.id, id);
-  fs.mkdirSync(folderPath, { recursive: true });
+  const folderPath = storage.localFolderPath(req.user.id, id);
+
+  const entryFile = runtime === 'python' ? 'main.py' : 'index.js';
+  const starter = runtime === 'python'
+    ? '# Upload your bot files, or edit this starter file.\nprint("Hello from your Nexus bot!")\n'
+    : '// Upload your bot files, or edit this starter file.\nconsole.log("Hello from your Nexus bot!");\n';
+  try {
+    await storage.createBotFolder({ id, user_id: req.user.id, folder_path: folderPath }, { entryFile, content: starter });
+  } catch (err) {
+    console.error('create bot folder error', err);
+    return res.status(502).json({ error: 'Could not create the bot\'s files. ' + err.message });
+  }
 
   const containerName = `nexus-bot-${id}`;
   const bot = Bot.createBot({ userId: req.user.id, name, runtime, containerName, folderPath });
   // Fix the row's id/folder to match the pre-generated id/folder used on disk.
   require('../db').prepare('UPDATE bots SET id = ?, folder_path = ? WHERE id = ?').run(id, folderPath, bot.id);
 
-  const entryFile = runtime === 'python' ? 'main.py' : 'index.js';
-  const starter = runtime === 'python'
-    ? '# Upload your bot files, or edit this starter file.\nprint("Hello from your Nexus bot!")\n'
-    : '// Upload your bot files, or edit this starter file.\nconsole.log("Hello from your Nexus bot!");\n';
-  fs.writeFileSync(path.join(folderPath, entryFile), starter, 'utf8');
   require('../db').prepare('UPDATE bots SET entry_file = ? WHERE id = ?').run(entryFile, id);
 
   const created = Bot.getById(id);
@@ -75,8 +72,9 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error(`Failed to remove container for bot ${bot.id}:`, err.message);
   }
-  fs.rmSync(bot.folder_path, { recursive: true, force: true });
+  await storage.deleteBotFolder(bot);
   Bot.deleteBot(bot.id);
+  if (bot.sftp_username) storage.syncSftpUsers().catch((e) => console.error('[sftp-sync]', e.message));
 
   res.json({ ok: true });
 });
@@ -84,13 +82,18 @@ router.delete('/:id', async (req, res) => {
 router.post('/:id/start', async (req, res) => {
   const bot = Bot.getByIdForUser(req.params.id, req.user.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
-  if (!bot.start_command && (!bot.entry_file || !fs.existsSync(path.join(bot.folder_path, bot.entry_file)))) {
-    return res.status(400).json({ error: `Entry file "${bot.entry_file}" not found. Upload your bot files first.` });
+  try {
+    if (!bot.start_command && (!bot.entry_file || !(await storage.fileExists(bot, bot.entry_file)))) {
+      return res.status(400).json({ error: `Entry file "${bot.entry_file}" not found. Upload your bot files first.` });
+    }
+  } catch (err) {
+    return res.status(503).json({ error: err.message });
   }
 
   try {
     const envVars = Bot.getEnvVars(bot);
-    const { containerId, hookOutput } = await dockerService.startBotContainer({ bot, hostFolderPath: bot.folder_path, envVars });
+    const hostFolderPath = await storage.dockerBindPath(bot);
+    const { containerId, hookOutput } = await dockerService.startBotContainer({ bot, hostFolderPath, envVars });
     Bot.updateStatus(bot.id, 'running', containerId);
     Bot.markStarted(bot.id);
     res.json({ bot: Bot.toPublic(Bot.getById(bot.id)), hookOutput });
@@ -139,7 +142,7 @@ router.get('/:id/logs', async (req, res) => {
   }
 });
 
-router.put('/:id/entry-file', (req, res) => {
+router.put('/:id/entry-file', async (req, res) => {
   const bot = Bot.getByIdForUser(req.params.id, req.user.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
 
@@ -147,8 +150,12 @@ router.put('/:id/entry-file', (req, res) => {
   if (!entryFile || /[\\/]/.test(entryFile) || entryFile.includes('..')) {
     return res.status(400).json({ error: 'Invalid entry file name.' });
   }
-  if (!fs.existsSync(path.join(bot.folder_path, entryFile))) {
-    return res.status(400).json({ error: 'That file does not exist in your bot folder.' });
+  try {
+    if (!(await storage.fileExists(bot, entryFile))) {
+      return res.status(400).json({ error: 'That file does not exist in your bot folder.' });
+    }
+  } catch (err) {
+    return res.status(503).json({ error: err.message });
   }
 
   Bot.updateEntryFile(bot.id, entryFile);
@@ -157,11 +164,14 @@ router.put('/:id/entry-file', (req, res) => {
 
 // Generates (or rotates) this bot's SFTP credentials. The plaintext password is
 // only ever returned in this response - only a bcrypt hash is stored.
-router.post('/:id/sftp-credentials', (req, res) => {
+router.post('/:id/sftp-credentials', async (req, res) => {
   const bot = Bot.getByIdForUser(req.params.id, req.user.id);
   if (!bot) return res.status(404).json({ error: 'Bot not found.' });
 
   const { sftpUsername, sftpPassword } = Bot.regenerateSftpCredentials(bot.id);
+  // When bots run on a remote node, its SFTP server needs the new login too.
+  // A failure here self-heals on the panel's periodic resync.
+  await storage.syncSftpUsers().catch((e) => console.error('[sftp-sync]', e.message));
   const port = process.env.SFTP_PORT || '2222';
   // SFTP traffic can't go through a Cloudflare-proxied domain (it only forwards
   // HTTP/HTTPS), so this must be the VPS's real reachable address, not PUBLIC_DOMAIN.

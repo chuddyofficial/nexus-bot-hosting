@@ -27,6 +27,9 @@ const { startSftpServer } = require('./sftp/sftpServer');
 const { attachConsoleSocket } = require('./ws/consoleSocket');
 const { runAutoStart } = require('./services/autoStart');
 const { watchContainerEvents } = require('./services/containerEvents');
+const storage = require('./services/botStorage');
+const botNode = require('./botnode/client');
+const Bot = require('./models/Bot');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -82,6 +85,21 @@ httpServer.listen(PORT, () => {
   console.log(`Nexus Bot Hosting API listening on port ${PORT}`);
 });
 
-startSftpServer();
+if (storage.isRemote) {
+  // Bots, Docker and SFTP live on the Linux bot node. Its SFTP server checks
+  // logins against hashes pushed from here; resync periodically so a node
+  // restart or a missed push heals itself.
+  console.log(`Bots run on remote bot node ${botNode.nodeHost}`);
+  const sync = () => storage.syncSftpUsers().catch((err) => console.error('[sftp-sync]', err.message));
+  sync();
+  setInterval(sync, 5 * 60 * 1000);
+} else {
+  startSftpServer({
+    authenticate: (username, password) => {
+      const bot = Bot.getBySftpUsername(username);
+      return bot && Bot.verifySftpPassword(bot, password) ? bot.folder_path : null;
+    }
+  });
+}
 watchContainerEvents();
 runAutoStart().catch((err) => console.error('[auto-start] unexpected error:', err));
